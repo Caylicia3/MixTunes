@@ -1,0 +1,46 @@
+# Dependencies and build output
+**/node_modules/
+app/dist/
+android/build/
+android/sdk/*
+!android/sdk/packages.json
+android/web/runtime.js
+android/native/build-work/
+android/native/*-test-classes/
+android/runtime-qa-*/
+
+# Local state and credentials
+android/signing/
+**/*profile*/
+**/Cache/
+**/Network/
+**/Cookies*
+**/Local Storage/
+**/Session Storage/
+**/library.json
+**/*playlist-backup*.json
+*.p12
+*.jks
+*.keystore
+*.pem
+.env
+.env.*
+*.log
+*.apk
+*.exe
+
+# Machine-specific verification and reports
+android/runtime-regression-result.json
+android/web-bundle-verification.json
+android/build-verification.json
+android/qq-mobile-login-probe/
+qq-mobile-login-probe/
+*-installed.json
+
+# Additional local credentials and diagnostics
+*.pfx
+*.key
+*.sqlite*
+*.db
+*-result.json
+*-report.json

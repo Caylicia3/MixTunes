@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; script-src 'self'; style-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'">
+  <title>MixTunes</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand" aria-label="MixTunes"><span>MixTunes</span><span class="alpha">1.0.0</span></div>
+      <section class="accounts" aria-labelledby="accounts-heading">
+        <div class="section-heading"><h2 id="accounts-heading">账号</h2><button id="refresh-accounts" data-testid="refresh-accounts" class="small-button" title="重新检查登录状态">刷新</button></div>
+        <div class="account-row"><span class="platform-icon qq" aria-hidden="true">Q</span><span class="account-title">QQ 音乐<small id="account-qq">未检查登录状态</small></span><button id="login-qq" data-testid="login-qq" aria-label="QQ 音乐官方快捷登录">快捷登录</button></div>
+        <div class="account-row"><span class="platform-icon netease" aria-hidden="true">云</span><span class="account-title">网易云音乐<small id="account-netease">未检查登录状态</small></span><button id="login-netease" data-testid="login-netease" aria-label="网易云音乐官方快捷登录">快捷登录</button></div>
+        <div class="account-row"><span class="platform-icon bilibili" aria-hidden="true">B</span><span class="account-title">Bilibili<small id="account-bilibili">未检查登录状态</small></span><button id="login-bilibili" data-testid="login-bilibili" aria-label="登录 Bilibili">登录</button></div>
+      </section>
+      <section class="playlists" aria-labelledby="playlists-heading">
+          <div class="section-heading"><h2 id="playlists-heading">歌单</h2><button id="create-playlist" data-testid="create-playlist" class="small-button" aria-label="新建统一歌单">＋ 新建</button></div>
+          <div id="playlist-list" data-testid="playlist-list" class="playlist-list" aria-label="选择歌单"></div>
+      </section>
+      <div class="sidebar-scroll">
+        <section class="import-card" aria-labelledby="import-heading">
+          <h1 id="import-heading">导入</h1>
+          <label class="sr-only" for="import-text">分享链接</label>
+          <textarea id="import-text" data-testid="import-input" placeholder="粘贴歌曲、歌单或 B 站链接" title="支持 QQ 音乐、网易云、B 站视频和收藏夹；每行一个链接" rows="3" spellcheck="false"></textarea>
+          <button class="primary import-button" id="import-button" data-testid="import-button">导入</button>
+        </section>
+      </div>
+      <div class="sidebar-bottom"><button id="open-playlist-share" data-testid="open-playlist-share" title="通过同一 Wi-Fi 传歌单到手机">传到手机</button><button id="quit-app" data-testid="quit-app" aria-label="退出播放器" title="退出播放器">退出播放器</button></div>
+    </aside>
+
+    <div class="workspace" id="workspace">
+      <button id="toggle-theme" data-testid="toggle-theme" class="theme-toggle" aria-label="切换到夜间主题" title="切换到夜间主题"><svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M20.2 15.4A8.3 8.3 0 0 1 8.6 3.8 8.3 8.3 0 1 0 20.2 15.4Z"></path></svg></button>
+      <button id="toggle-video-panel" data-testid="toggle-video-panel" class="video-panel-toggle" aria-label="打开视频侧栏" aria-pressed="false" title="打开视频侧栏"><svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"></rect><path d="M15 4v16"></path><path class="panel-symbol-fill" d="M15 4h2a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-2z"></path></svg></button>
+    <main class="main" id="library-main">
+      <header class="library-heading"><div class="library-title"><h2><span class="playlist-name" id="active-playlist-name" data-testid="active-playlist-name">统一歌单</span><span id="track-count" data-testid="track-count">0</span></h2></div><div class="backup-actions"><button id="open-quality-settings" data-testid="open-quality-settings" aria-label="打开平台音质设置">音质</button><button id="import-file" data-testid="import-file" title="导入 JSON 歌单备份或链接文件">导入文件</button><button id="export-library" data-testid="export-library" title="导出歌单 JSON 备份">导出</button></div></header>
+      <div class="toolbar">
+        <div class="source-filters" role="group" aria-label="按平台筛选"><button class="active" data-filter="all" data-testid="filter-all" aria-pressed="true">全部</button><button data-filter="qq" data-testid="filter-qq" aria-pressed="false">QQ 音乐</button><button data-filter="netease" data-testid="filter-netease" aria-pressed="false">网易云</button><button data-filter="bilibili" data-testid="filter-bilibili" aria-pressed="false">B 站</button></div>
+        <div class="library-search-tools"><label class="search-wrap"><span aria-hidden="true">⌕</span><input type="search" id="search-input" data-testid="search-input" placeholder="筛选歌单" aria-label="搜索歌单"></label><button id="open-online-search" data-testid="open-online-search">全平台搜索</button></div>
+      </div>
+      <div class="queue-actions"><button class="play-library" id="play-all" data-testid="play-all">▶ 播放</button><span id="queue-summary">0 首歌曲</span><button id="clear-library" data-testid="clear-library" class="text-button" title="清空当前歌单">清空</button></div>
+      <div id="notice" data-testid="notice" class="notice" role="status" aria-live="polite" hidden><span id="notice-text"></span><button id="dismiss-notice" aria-label="关闭提示">×</button></div>
+      <div class="track-region" id="track-region">
+        <table class="track-table" id="track-table" data-testid="track-table" aria-label="统一歌单" hidden><thead><tr><th class="index-column" scope="col">#</th><th scope="col">歌曲</th><th class="source-column" scope="col">来源</th><th class="duration-column" scope="col">时长</th><th class="actions-column" scope="col"><span class="sr-only">操作</span></th></tr></thead><tbody id="track-list" data-testid="track-list"></tbody></table>
+        <div class="empty-state" id="empty-state" data-testid="empty-state"><h3 id="empty-title">还没有歌曲</h3><p id="empty-description" hidden></p><button id="focus-import" class="secondary">导入</button></div>
+      </div>
+      <footer class="library-footer" hidden><span id="connection-status" data-testid="connection-status">正在连接播放器…</span></footer>
+    </main>
+    <aside class="video-panel" id="video-panel" data-testid="video-panel" aria-label="Bilibili 视频侧栏" hidden>
+      <header class="video-panel-heading"><div class="video-panel-title"><h2 id="video-panel-title">视频</h2></div><div class="video-panel-actions"><button id="expand-video-panel" data-testid="expand-video-panel" aria-label="放大视频侧栏" title="放大">⛶</button><button id="shrink-video-panel" data-testid="shrink-video-panel" aria-label="缩小视频侧栏" title="缩小" hidden>↙</button><button id="close-video-panel" data-testid="close-video-panel" aria-label="关闭视频侧栏" title="关闭并暂停视频">×</button></div></header>
+      <div class="video-login-hint" id="video-login-hint"><span>Bilibili 未登录</span><button id="video-login-bilibili" data-testid="video-login-bilibili">登录</button></div>
+      <div id="video-surface" data-testid="video-surface" class="video-surface"><div id="video-placeholder" class="video-placeholder"><span class="video-placeholder-symbol" aria-hidden="true">▷</span><h3 id="video-placeholder-title">选择视频</h3><p id="video-placeholder-description" hidden></p><button id="play-panel-video" data-testid="play-panel-video" hidden>播放视频</button></div></div>
+    </aside>
+    </div>
+
+    <section class="player-bar" aria-label="播放控制">
+      <div class="now-playing"><button class="cover-placeholder" id="current-cover" data-testid="open-lyrics" aria-label="打开当前歌曲歌词" title="打开歌词" disabled>♫</button><div class="now-details"><div class="now-title" id="current-title" data-testid="current-title">准备好听点什么？</div><div class="now-subtitle-line"><div class="now-subtitle" id="current-artist">导入歌曲后开始播放</div><button id="current-video" data-testid="current-video" title="观看当前 B 站视频（V）" aria-label="观看当前 B 站视频" hidden>看视频</button></div><div class="now-state"><span id="current-platform"></span><span id="playback-status" data-testid="playback-status">待播放</span><span id="current-backend" data-testid="current-backend"></span></div><div class="quality-playback" id="quality-playback" hidden><span id="current-quality" data-testid="current-quality"></span><span id="quality-fallback" data-testid="quality-fallback" hidden></span></div></div><button class="icon-button source-link" id="open-source" data-testid="open-source" aria-label="打开当前内容的原站链接" title="打开原站" disabled>↗</button></div>
+      <div class="transport"><div class="transport-buttons"><button class="icon-button mode-button" id="cycle-mode" data-testid="cycle-mode" aria-label="播放模式：顺序播放" title="顺序播放">→</button><button class="icon-button skip-button" id="previous" data-testid="previous" aria-label="上一首" title="上一首">⏮</button><button class="main-play" id="play-pause" data-testid="play-pause" aria-label="播放" title="播放">▶</button><button class="icon-button skip-button" id="next" data-testid="next" aria-label="下一首" title="下一首">⏭</button><select id="play-mode" data-testid="play-mode" aria-label="播放模式"><option value="sequential">顺序播放</option><option value="repeat-all">列表循环</option><option value="repeat-one">单曲循环</option><option value="shuffle">随机播放</option></select><button id="edit-current-range" data-testid="edit-current-range" title="编辑播放片段；黄色指针控制起止位置" aria-label="编辑当前歌曲的播放范围" disabled>片段</button></div><div class="progress-row"><span id="position">0:00</span><div class="progress-tracks"><input type="range" id="seek" data-testid="seek" min="0" max="1000" value="0" step="1" aria-label="播放进度" disabled><div class="clip-markers" id="clip-markers" aria-label="黄色指针调整播放范围"><div class="clip-track"></div><div class="clip-selection" id="clip-selection"></div><input type="range" id="range-start" data-testid="range-start" min="0" max="1000" value="0" step="1" aria-label="播放范围起点，黄色指针" disabled><input type="range" id="range-end" data-testid="range-end" min="0" max="1000" value="1000" step="1" aria-label="播放范围终点，黄色指针" disabled></div></div><span id="duration">0:00</span></div></div>
+      <div class="volume-control"><button class="icon-button" id="mute" data-testid="mute" aria-label="静音" title="静音">◖))</button><input type="range" id="volume" data-testid="volume" min="0" max="1" step="0.01" value="0.8" aria-label="音量"><span id="volume-value">80%</span></div>
+    </section>
+  </div>
+  <div id="playlist-context-menu" data-testid="playlist-context-menu" class="playlist-context-menu" role="menu" aria-label="歌单操作" hidden><button id="rename-playlist" data-testid="rename-playlist" type="button" role="menuitem">重命名</button><button id="delete-playlist" data-testid="delete-playlist" type="button" role="menuitem">删除</button></div>
+  <dialog id="playlist-dialog" class="playlist-dialog" aria-labelledby="playlist-dialog-title" aria-describedby="playlist-dialog-description">
+    <form id="playlist-form">
+      <h2 id="playlist-dialog-title">新建歌单</h2>
+      <p id="playlist-dialog-description"></p>
+      <div id="playlist-name-field"><label for="playlist-name-input">歌单名称</label><input id="playlist-name-input" data-testid="playlist-name-input" maxlength="80" placeholder="例如：通勤路上" autocomplete="off"></div>
+      <p id="playlist-dialog-error" class="dialog-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button id="playlist-dialog-cancel" type="button">取消</button><button id="playlist-dialog-submit" data-testid="playlist-dialog-submit" type="submit" class="primary">创建歌单</button></div>
+    </form>
+  </dialog>
+  <dialog id="quality-dialog" class="playlist-dialog quality-dialog" aria-labelledby="quality-dialog-title" aria-describedby="quality-dialog-description">
+    <h2 id="quality-dialog-title">平台音质</h2>
+    <p id="quality-dialog-description">音质受账号权限和音源限制。</p>
+    <div class="quality-setting"><label for="quality-qq"><span class="platform-icon qq" aria-hidden="true">Q</span>QQ 音乐</label><select id="quality-qq" data-testid="quality-qq" aria-label="QQ 音乐音质"><option value="auto">自动</option><option value="high">高品质</option><option value="lossless">无损</option><option value="standard">标准</option></select></div>
+    <div class="quality-setting"><label for="quality-netease"><span class="platform-icon netease" aria-hidden="true">云</span>网易云音乐</label><select id="quality-netease" data-testid="quality-netease" aria-label="网易云音乐音质"><option value="auto">自动</option><option value="high">高品质</option><option value="lossless">无损</option><option value="standard">标准</option></select></div>
+    <div class="quality-setting"><label for="quality-bilibili"><span class="platform-icon bilibili" aria-hidden="true">B</span>Bilibili 音频</label><select id="quality-bilibili" data-testid="quality-bilibili" aria-label="Bilibili 音频音质"><option value="auto">自动</option><option value="standard">标准</option></select></div>
+    <p id="quality-save-status" class="quality-save-status" role="status" aria-live="polite"></p>
+    <div class="dialog-actions"><button id="close-quality-settings" data-testid="close-quality-settings" class="primary" type="button">完成</button></div>
+  </dialog>
+  <dialog id="track-rename-dialog" class="playlist-dialog" aria-labelledby="track-rename-title">
+    <form id="track-rename-form"><h2 id="track-rename-title">修改显示名称</h2><p id="track-original-name"></p><label for="track-name-input">歌单中显示的名称</label><input id="track-name-input" data-testid="track-name-input" maxlength="500" required autocomplete="off"><p id="track-rename-error" class="dialog-error" role="alert" hidden></p><div class="dialog-actions"><button id="track-rename-cancel" type="button">取消</button><button id="track-rename-submit" data-testid="track-rename-submit" class="primary" type="submit">保存名称</button></div></form>
+  </dialog>
+  <dialog id="track-range-dialog" class="playlist-dialog range-dialog" aria-labelledby="track-range-title">
+    <form id="track-range-form"><h2 id="track-range-title">播放片段</h2><p id="range-track-name"></p><div class="range-fields"><div><label for="range-start-seconds">开始（秒）</label><input id="range-start-seconds" data-testid="range-start-seconds" type="number" min="0" step="0.001" required></div><div><label for="range-end-seconds">结束（秒，留空到结尾）</label><input id="range-end-seconds" data-testid="range-end-seconds" type="number" min="0" step="0.001"></div></div><p class="range-help" id="range-help">黄色指针也可调整范围，至少保留 1 秒。时间始终对应原曲位置。</p><p id="track-range-error" class="dialog-error" role="alert" hidden></p><div class="dialog-actions"><button id="reset-track-range" data-testid="reset-track-range" type="button">重置完整范围</button><button id="track-range-cancel" type="button">取消</button><button id="track-range-submit" data-testid="track-range-submit" class="primary" type="submit">保存片段</button></div></form>
+  </dialog>
+  <dialog id="online-search-dialog" data-testid="online-search-dialog" class="playlist-dialog online-search-dialog" aria-labelledby="online-search-title">
+    <header class="online-search-heading"><h2 id="online-search-title">全平台搜索</h2><button id="close-online-search" data-testid="close-online-search" type="button" class="icon-button" aria-label="关闭全平台搜索" title="关闭">×</button></header>
+    <form id="online-search-form" class="online-search-form"><label class="sr-only" for="online-search-query">歌名或作者</label><input id="online-search-query" data-testid="online-search-query" type="search" maxlength="100" placeholder="歌名或作者" autocomplete="off" required><button id="online-search-submit" data-testid="online-search-submit" class="primary" type="submit">搜索</button></form>
+    <p id="online-search-target" class="online-search-target"></p>
+    <div class="online-search-tabs" role="tablist" aria-label="搜索平台"><button type="button" data-online-filter="all" data-testid="online-filter-all" role="tab" aria-selected="true" class="active">全部</button><button type="button" data-online-filter="qq" data-testid="online-filter-qq" role="tab" aria-selected="false">QQ 音乐</button><button type="button" data-online-filter="netease" data-testid="online-filter-netease" role="tab" aria-selected="false">网易云</button><button type="button" data-online-filter="bilibili" data-testid="online-filter-bilibili" role="tab" aria-selected="false">B 站</button></div>
+    <p id="online-search-message" class="online-search-message" role="status" aria-live="polite" hidden></p>
+    <div id="online-search-results" data-testid="online-search-results" class="online-search-results" aria-label="搜索结果"><div class="online-search-empty">输入歌名或作者</div></div>
+  </dialog>
+  <dialog id="search-add-dialog" data-testid="search-add-dialog" class="playlist-dialog search-add-dialog" aria-labelledby="search-add-title">
+    <form id="search-add-form"><h2 id="search-add-title">加入歌单</h2><p id="search-add-name"></p><label for="search-add-playlist">目标歌单</label><select id="search-add-playlist" data-testid="search-add-playlist" aria-label="目标歌单"></select><p id="search-add-status" data-testid="search-add-status" class="search-add-status" role="status" aria-live="polite" hidden></p><div class="dialog-actions"><button id="search-add-cancel" data-testid="search-add-cancel" type="button">取消</button><button id="search-add-submit" data-testid="search-add-submit" class="primary" type="submit">加入</button></div></form>
+  </dialog>
+  <dialog id="lyrics-dialog" data-testid="lyrics-dialog" class="playlist-dialog lyrics-dialog" aria-labelledby="lyrics-heading">
+    <header class="lyrics-heading"><h2 id="lyrics-heading">歌词</h2><button id="close-lyrics" data-testid="close-lyrics" class="icon-button" aria-label="返回歌单" title="返回歌单">⌄</button></header>
+    <div class="lyrics-body"><section class="lyrics-track"><div id="lyrics-cover" class="lyrics-cover" aria-hidden="true">♫</div><h3 id="lyrics-track-title"></h3><p id="lyrics-track-artist"></p><span id="lyrics-track-platform" class="source-tag"></span></section><section class="lyrics-content" aria-label="当前歌曲歌词"><div id="lyrics-viewport" data-testid="lyrics-viewport" class="lyrics-viewport" tabindex="0"><div id="lyrics-lines" data-testid="lyrics-lines" class="lyrics-lines"></div><div id="lyrics-message" data-testid="lyrics-message" class="lyrics-message" role="status"></div></div><div class="lyrics-follow-actions"><button id="lyrics-retry" data-testid="lyrics-retry" hidden>重试</button><button id="lyrics-follow" data-testid="lyrics-follow" hidden>回到当前行</button><span id="lyrics-source"></span></div></section></div>
+    <footer class="lyrics-player"><div class="lyrics-transport"><button id="lyrics-previous" data-testid="lyrics-previous" class="icon-button" aria-label="上一首">⏮</button><button id="lyrics-play-pause" data-testid="lyrics-play-pause" class="main-play" aria-label="播放">▶</button><button id="lyrics-next" data-testid="lyrics-next" class="icon-button" aria-label="下一首">⏭</button></div><div class="lyrics-progress"><span id="lyrics-position">0:00</span><input id="lyrics-seek" data-testid="lyrics-seek" type="range" min="0" max="1" value="0" step="1" aria-label="歌词页播放进度"><span id="lyrics-duration">0:00</span></div></footer>
+  </dialog>
+  <dialog id="playlist-share-dialog" data-testid="playlist-share-dialog" class="playlist-dialog playlist-share-dialog" aria-labelledby="playlist-share-heading">
+    <header class="online-search-heading"><h2 id="playlist-share-heading">传到手机</h2><button id="close-playlist-share" data-testid="close-playlist-share" class="icon-button" aria-label="关闭分享窗口" title="关闭">×</button></header><p class="share-hint">电脑和手机连接同一 Wi-Fi</p><p id="playlist-share-status" data-testid="playlist-share-status" role="status"></p><div id="playlist-share-details" hidden><p id="playlist-share-counts"></p><div id="playlist-share-address-choice" hidden><label for="playlist-share-address">网络地址</label><select id="playlist-share-address" data-testid="playlist-share-address"></select></div><label for="playlist-share-url" class="sr-only">手机访问链接</label><div class="share-url-row"><input id="playlist-share-url" data-testid="playlist-share-url" readonly spellcheck="false"><button id="copy-playlist-share" data-testid="copy-playlist-share">复制链接</button></div><p id="playlist-share-expiry"></p></div><div class="dialog-actions"><button id="stop-playlist-share" data-testid="stop-playlist-share" disabled>停止分享</button><button id="refresh-playlist-share" data-testid="refresh-playlist-share" class="primary">重新生成</button></div>
+  </dialog>
+  <script src="app.js"></script>
+</body>
+</html>
+

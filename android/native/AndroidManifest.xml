@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="local.mixtunes.mobile" android:versionCode="4" android:versionName="1.0.0">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <queries>
+    <package android:name="com.tencent.qqmusic" />
+    <package android:name="com.tencent.mobileqq" />
+    <package android:name="com.tencent.mm" />
+    <package android:name="com.netease.cloudmusic" />
+    <package android:name="tv.danmaku.bili" />
+    <package android:name="com.bilibili.app.in" />
+  </queries>
+  <application android:label="MixTunes" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="true" android:allowBackup="false" android:hardwareAccelerated="true" android:icon="@android:drawable/ic_media_play" android:supportsRtl="true">
+    <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:configChanges="orientation|screenSize|keyboardHidden|uiMode" android:windowSoftInputMode="adjustResize">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="mixtunes" android:host="playlist-import" />
+      </intent-filter>
+    </activity>
+    <service android:name=".PlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback" android:stopWithTask="true" />
+  </application>
+</manifest>
