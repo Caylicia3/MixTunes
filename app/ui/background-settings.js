@@ -25,10 +25,16 @@
     }
     function schedulePersist() { clearTimeout(persistTimer); persistTimer = setTimeout(persistEffects, 250); }
     async function call(action, value) { const result = await api.background(action, value); if (result?.ok === false) throw Error(result.error || '背景操作失败'); return result; }
+    function paintRange(input) {
+      const min = Number(input.min) || 0, max = Number(input.max) || 100, value = Number(input.value) || 0;
+      const percent = max > min ? ((value - min) / (max - min)) * 100 : 0;
+      input.style.setProperty('--range-progress', percent.toFixed(2) + '%');
+    }
     function sync() {
       mode.value = controller.mode(); legacy.checked = controller.enabled();
       opacity.value = controller.opacity(); $('background-opacity-value').textContent = opacity.value + '%';
       blur.value = controller.blur(); $('background-blur-value').textContent = blur.value + 'px';
+      paintRange(opacity); paintRange(blur);
       opacity.disabled = mode.value === 'theme';
       blur.disabled = mode.value === 'theme';
       $('background-recrop').disabled = busy || !saved;
@@ -91,8 +97,8 @@
       } finally { bitmap.close(); }
     }
     mode.addEventListener('change', () => { const persisted = controller.setMode(mode.value); sync(); message(persisted === false ? '背景模式仅本次生效，当前环境无法保存设置。' : mode.value === 'custom' && !saved ? '尚未选择图片，请选择本地背景。' : '背景模式已保存。'); });
-    opacity.addEventListener('input', () => { controller.setOpacity(opacity.value, { persist: false }); $('background-opacity-value').textContent = opacity.value + '%'; schedulePersist(); });
-    blur.addEventListener('input', () => { controller.setBlur(blur.value, { persist: false }); $('background-blur-value').textContent = blur.value + 'px'; schedulePersist(); });
+    opacity.addEventListener('input', () => { controller.setOpacity(opacity.value, { persist: false }); $('background-opacity-value').textContent = opacity.value + '%'; paintRange(opacity); schedulePersist(); });
+    blur.addEventListener('input', () => { controller.setBlur(blur.value, { persist: false }); $('background-blur-value').textContent = blur.value + 'px'; paintRange(blur); schedulePersist(); });
     for (const input of [opacity, blur]) { input.addEventListener('change', persistEffects); input.addEventListener('blur', persistEffects); }
     legacy.addEventListener('change', sync);
     $('background-pick').addEventListener('click', async () => {
