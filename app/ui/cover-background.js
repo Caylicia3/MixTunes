@@ -106,12 +106,15 @@
       custom: () => custom,
       setMode(value) {
         const nextMode = ['theme', 'current-cover', 'custom'].includes(value) ? value : 'theme';
-        if (nextMode === mode) { update(latest); return; }
+        const changed = nextMode !== mode;
         mode = nextMode;
         enabled = mode === 'current-cover';
-        try { storage?.setItem(STORAGE_KEY, mode); } catch { onStorageError(); }
+        let saved = true;
+        try { if (!storage) throw Error('Settings unavailable'); storage.setItem(STORAGE_KEY, mode); } catch { saved = false; onStorageError(); }
         // A mode switch can reuse the same pixels, but must reset their layout.
-        source = ''; reset(); update(latest);
+        if (changed) { source = ''; reset(); }
+        update(latest);
+        return saved;
       },
       setCustom(value) { custom = value; if (mode === 'custom') { update(latest); layoutCustom(); } },
       setOpacity(value) {
@@ -119,7 +122,7 @@
         container.style?.setProperty('--background-opacity', String(opacity / 100));
         if (!opacity) documentRoot.classList.remove('has-cover-background');
         else if (container.children.length) documentRoot.classList.add('has-cover-background');
-        try { storage?.setItem('mixtunes-background-opacity', String(opacity)); } catch { onStorageError(); }
+        try { if (!storage) throw Error('Settings unavailable'); storage.setItem('mixtunes-background-opacity', String(opacity)); return true; } catch { onStorageError(); return false; }
       },
       setEnabled(value) {
         enabled = Boolean(value);

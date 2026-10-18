@@ -111,6 +111,10 @@ test('old cover mode retains 100% defaults; all providers share persisted opacit
   assert.equal(fixture('current-cover').controller.opacity(),100);
   assert.equal(fixture('current-cover',false,'45').controller.opacity(),45);
   assert.equal(fixture('current-cover',false,'invalid').controller.opacity(),100);
+  const unavailable=fixture('current-cover',true);
+  assert.equal(unavailable.controller.setMode('theme'),false);
+  assert.equal(unavailable.controller.setMode('theme'),false);
+  assert.equal(unavailable.controller.setOpacity(45),false);
   for(const platform of ['qq','netease','bilibili']){
     const f=fixture('current-cover'),state=snapshot();state.currentTrack.platform=platform;
     f.controller.update(state);f.images[0].onload();

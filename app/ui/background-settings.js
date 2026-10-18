@@ -76,7 +76,7 @@
         return await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(Error('无法处理图片')); reader.readAsDataURL(blob); });
       } finally { bitmap.close(); }
     }
-    mode.addEventListener('change', () => { controller.setMode(mode.value); sync(); message(mode.value === 'custom' && !saved ? '尚未选择图片，请选择本地背景。' : '背景模式已保存。'); });
+    mode.addEventListener('change', () => { const persisted = controller.setMode(mode.value); sync(); message(persisted === false ? '背景模式仅本次生效，当前环境无法保存设置。' : mode.value === 'custom' && !saved ? '尚未选择图片，请选择本地背景。' : '背景模式已保存。'); });
     opacity.addEventListener('input', () => { controller.setOpacity(opacity.value); $('background-opacity-value').textContent = opacity.value + '%'; });
     legacy.addEventListener('change', sync);
     $('background-pick').addEventListener('click', async () => {
@@ -114,8 +114,8 @@
       try {
         $('background-crop-status').textContent = '正在保存…';
         const result = await call('save', value); saved = policy.validate(result);
-        controller.setCustom(saved); controller.setMode('custom');
-        message('自定义背景已保存，仅在此设备使用。'); saving = false; close(); sync();
+        controller.setCustom(saved); const persisted = controller.setMode('custom');
+        message(persisted === false ? '图片副本已保存，但背景模式仅本次生效，当前环境无法保存设置。' : '自定义背景已保存，仅在此设备使用。'); saving = false; close(); sync();
       } catch (error) { $('background-crop-status').textContent = '保存失败，原背景未更改：' + error.message; }
       finally { saving = false; for (const button of dialog.querySelectorAll('button,input')) button.disabled = false; }
     };

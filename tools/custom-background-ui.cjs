@@ -87,6 +87,10 @@ test('shared background import/crop/opacity UI on desktop, phone, landscape and 
       assert.ok(saved.image.length<4*1024*1024*4/3+32);
     }
     const lastSaved=structuredClone(saved);
+    await page.evaluate(()=>{window.originalSetItem=Storage.prototype.setItem;Storage.prototype.setItem=()=>{throw new DOMException('Quota exceeded','QuotaExceededError');};});
+    await page.locator('#background-mode').selectOption('theme');assert.ok((await page.locator('#status').textContent()).includes('仅本次生效'));
+    await page.locator('#background-mode').selectOption('custom');assert.ok((await page.locator('#status').textContent()).includes('仅本次生效'));
+    await page.evaluate(()=>{Storage.prototype.setItem=originalSetItem;});
     choice={image:'data:image/jpeg;base64,'+Buffer.from([255,216,255,192,0,11,8,0,4,0,4,1,1,17,0,255,217]).toString('base64')};
     await page.locator('#background-pick').click();await page.waitForFunction(()=>document.getElementById('status').textContent.includes('无法解码'));assert.deepEqual(saved,lastSaved);
     await page.locator('#background-delete').click();assert.equal(saved,null);assert.equal(await page.locator('#background-mode').inputValue(),'theme');
