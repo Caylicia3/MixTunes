@@ -197,6 +197,8 @@ textarea::placeholder, input::placeholder { color: var(--placeholder); }
 .library-search-tools { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 240px; max-width: 360px; }
 .library-search-tools .search-wrap { max-width: none; min-width: 120px; }
 #open-online-search { padding: 8px 10px; font-size: 11px; }
+.library-scope { margin: -7px 0 12px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.online-search-scope { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; flex-shrink: 0; }
 .queue-actions { display: flex; align-items: center; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 .play-library { background: var(--primary); border-color: var(--primary); color: var(--primary-text); font-size: 12px; padding: 7px 12px; }
 .play-library:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
@@ -213,6 +215,9 @@ textarea::placeholder, input::placeholder { color: var(--placeholder); }
 .track-table tbody tr { cursor: pointer; }
 .track-table tbody tr:hover { background: var(--hover); }
 .track-table tbody tr.current { background: var(--current); }
+.track-table tbody tr.located { outline: 2px solid var(--text); outline-offset: -2px; animation: locate-pulse 1.8s ease-out; }
+@keyframes locate-pulse { from { box-shadow: inset 5px 0 0 var(--text); } to { box-shadow: inset 0 0 0 var(--text); } }
+@media (prefers-reduced-motion: reduce) { .track-table tbody tr.located { animation: none; } }
 .track-table tbody tr.dragging { opacity: .45; }
 .track-table tbody tr.drop-target { box-shadow: inset 0 2px 0 var(--text); }
 .index-column { width: 40px; text-align: center !important; }
@@ -241,6 +246,7 @@ textarea::placeholder, input::placeholder { color: var(--placeholder); }
 .empty-state { height: 100%; min-height: 180px; padding: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
 .empty-state h3 { font-size: 14px; font-weight: 400; margin: 0; color: var(--muted); }
 .empty-state p { font-size: 12px; color: var(--muted); margin: 0; }
+.empty-state #empty-description { max-width: 380px; overflow-wrap: anywhere; }
 .empty-state button { font-size: 12px; }
 .library-footer { font-size: 10px; color: var(--subtle); padding: 10px 0; }
 
@@ -254,6 +260,7 @@ textarea::placeholder, input::placeholder { color: var(--placeholder); }
 .now-subtitle { flex: 1; min-width: 0; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #current-video { flex-shrink: 0; font-size: 10px; line-height: 1.2; padding: 2px 5px; color: var(--text); background: var(--surface); border-color: var(--border); }
 .now-state { display: flex; gap: 6px; font-size: 10px; line-height: 1.5; margin-top: 4px; color: var(--muted); }
+#locate-playing { flex-shrink: 0; margin-left: auto; padding: 0 3px; font-size: 10px; line-height: 1.5; color: var(--text); background: var(--surface); border-color: var(--border); }
 .quality-playback { display: flex; align-items: center; gap: 6px; margin-top: 2px; min-width: 0; font-size: 10px; line-height: 1.4; color: var(--muted); }
 #current-quality { flex-shrink: 1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #quality-fallback { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warning); }
@@ -495,3 +502,16 @@ button.lyric-line:hover { background: var(--hover); color: var(--text); }
   .video-panel-toggle, .theme-toggle { top: 20px; }
   .video-panel, .app.video-panel-expanded .video-panel { padding-top: 18px; gap: 12px; }
 }
+
+/* Sleep timer (task F) */
+.sleep-timer-settings { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.sleep-timer-title { margin: 0 0 6px; font-size: 13px; font-weight: 500; }
+.sleep-timer-hint { margin: 0 0 10px; font-size: 11px; line-height: 1.6; color: var(--muted); }
+.sleep-timer-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.sleep-timer-presets button { padding: 6px 12px; font-size: 12px; }
+.sleep-timer-custom { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.sleep-timer-custom label { margin: 0; font-size: 12px; color: var(--muted); }
+.sleep-timer-custom input { width: 92px; padding: 7px 9px; font-size: 12px; }
+.sleep-timer-status { margin: 6px 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.sleep-timer-error { margin: 4px 0; font-size: 11px; color: var(--danger); }
+.sleep-timer-cancel { font-size: 12px; }

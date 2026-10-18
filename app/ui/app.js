@@ -4,7 +4,8 @@
   const api = window.playerAPI;
   const byId = (id) => document.getElementById(id);
   const platformNames = { qq: 'QQ 音乐', netease: '网易云', bilibili: 'Bilibili' };
-  const DIALOG_IDS = ['playlist-dialog', 'quality-dialog', 'track-rename-dialog', 'track-range-dialog', 'online-search-dialog', 'search-add-dialog', 'lyrics-dialog', 'playlist-share-dialog'];
+  const sleepTimerPanel = window.mixTunesSleepTimer?.mount({ api, anchor: byId('quality-save-status') });
+  const DIALOG_IDS = ['background-crop-dialog', 'playlist-dialog', 'quality-dialog', 'track-rename-dialog', 'track-range-dialog', 'online-search-dialog', 'search-add-dialog', 'lyrics-dialog', 'playlist-share-dialog'];
   const modeNames = { sequential: '顺序播放', 'repeat-all': '列表循环', 'repeat-one': '单曲循环', shuffle: '随机播放' };
   const modeIcons = { sequential: '→', 'repeat-all': '↻', 'repeat-one': '↻₁', shuffle: '⤨' };
   const modes = Object.keys(modeNames);
@@ -24,6 +25,7 @@
   let playlistDialogAction = null;
   let playlistMenuTargetId = null;
   let searchAddTarget = null;
+  let onlineExistingSignature = '';
   let searchAddPlaylistSignature = '';
   let importing = false;
   let renameTrackKey = null;
@@ -34,6 +36,14 @@
   let videoLayoutSignature = '';
   let nativeDialogDepth = 0;
   let noticeTimer = null;
+  let pendingLocate = null;
+  const coverBackground = window.mixTunesCoverBackground.create({
+    container: byId('cover-background'),
+    onStorageError: () => { byId('cover-background-setting-status').textContent = '当前环境无法保存设置，仅本次有效。'; },
+  });
+  byId('cover-background-enabled').checked = coverBackground.enabled();
+  byId('cover-background-enabled').addEventListener('change', (event) => coverBackground.setEnabled(event.target.checked));
+  window.mixTunesBackgroundSettings?.mount({ controller: coverBackground, api, status: byId('cover-background-setting-status'), legacy: byId('cover-background-enabled') });
   let lyrics = { serial: 0, key: null, status: 'idle', lines: [], activeIndex: -1, manualUntil: 0, manualRevision: 0, coverKey: '' };
   let lyricsFollowTimer = null;
   let lyricsSeeking = false;
@@ -312,6 +322,58 @@
     });
   }
 
+  function finishLocate() {
+    const request = pendingLocate;
+    if (!request) return;
+    const target = window.mixTunesLocatePlaying.target(state);
+    if (target.message || target.key !== request.key || target.playlistId !== request.playlistId || target.generation !== request.generation) {
+      clearTimeout(request.timer);
+      pendingLocate = null;
+      showNotice(target.message || '播放歌曲已变化，请重新定位。');
+      return;
+    }
+    if (!request.ready || state.activePlaylistId !== target.playlistId) return;
+    clearTimeout(request.timer);
+    pendingLocate = null;
+    resetView();
+    renderList();
+    const row = Array.from(byId('track-list').children).find((item) => item.dataset.key === target.key);
+    if (!row) { showNotice('当前歌曲已不在歌单中，请重新定位。'); return; }
+    byId('track-list').querySelectorAll('.located').forEach((item) => item.classList.remove('located'));
+    row.tabIndex = -1;
+    // Restart the pulse on repeated clicks without changing playback or queue.
+    row.classList.remove('located');
+    void row.offsetWidth;
+    row.classList.add('located');
+    showNotice(`已定位到“${activePlaylist().name}”中的当前歌曲。`);
+    row.scrollIntoView({ block: 'center', behavior: 'instant' });
+    row.focus({ preventScroll: true });
+  }
+
+  async function locatePlaying() {
+    if (pendingLocate) return;
+    const target = window.mixTunesLocatePlaying.target(state);
+    if (target.message) { showNotice(target.message); return; }
+    const request = { ...target, ready: state.activePlaylistId === target.playlistId };
+    pendingLocate = request;
+    request.timer = setTimeout(() => {
+      if (pendingLocate !== request) return;
+      pendingLocate = null;
+      showNotice('歌单状态尚未更新，请重新定位。');
+    }, 5000);
+    if (!request.ready) {
+      const result = await command('playlist-select', { id: target.playlistId });
+      if (pendingLocate !== request) return;
+      if (result === null) {
+        clearTimeout(request.timer);
+        pendingLocate = null;
+        return;
+      }
+      request.ready = true;
+    }
+    finishLocate();
+  }
+
   function renderPlaylists() {
     const playlists = Array.isArray(state.playlists) ? state.playlists : [];
     const active = activePlaylist();
@@ -454,6 +516,54 @@
     return String(typeof error === 'string' ? error : error?.message || '暂时无法完成请求').slice(0, 300);
   }
 
+  function onlineMetadataIdentity(title, artist) {
+    const normalise = (value) => (typeof value === 'string' ? value.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLowerCase() : '');
+    const name = normalise(title), by = normalise(artist);
+    return name && by ? JSON.stringify([name, by]) : null;
+  }
+  function playlistHasOnlineMetadata(playlist, item) {
+    const identity = onlineMetadataIdentity(item.title, item.artist);
+    if (!identity) return false;
+    const tracks = new Map((state.tracks || []).map((track) => [track.key, track]));
+    return (playlist.queue || []).some((key) => onlineMetadataIdentity(tracks.get(key)?.title, tracks.get(key)?.artist) === identity);
+  }
+  function onlineExistingPlaylists(entry) {
+    return window.mixTunesSearchMatch?.playlistsContaining(state.playlists || [], state.tracks || [], entry.item) || [];
+  }
+  function onlineAdditionSummary(entry) {
+    const additions = Object.values(entry.additions || {});
+    const joinedIds = new Set(onlineExistingPlaylists(entry));
+    for (const [playlistId, addition] of Object.entries(entry.additions || {})) {
+      if (addition.status === 'added' || addition.status === 'exists') joinedIds.add(playlistId);
+    }
+    return {
+      adding: additions.some((addition) => addition.status === 'adding'),
+      joined: joinedIds.size,
+      duplicate: additions.some((addition) => addition.status === 'duplicate'),
+      failed: additions.some((addition) => addition.status === 'error')
+    };
+  }
+  function reconcileOnlineAdditions() {
+    if (!byId('online-search-dialog').open) return;
+    let changed = false;
+    for (const record of Object.values(onlineSearch.platforms)) {
+      for (const entry of record.entries || []) {
+        for (const [playlistId, addition] of Object.entries(entry.additions || {})) {
+          const playlist = (state.playlists || []).find((item) => item.id === playlistId);
+          let stale = !playlist;
+          if (!stale && (addition.status === 'added' || addition.status === 'exists')) stale = !addition.key || !(playlist.queue || []).includes(addition.key);
+          if (!stale && addition.status === 'duplicate') stale = !playlistHasOnlineMetadata(playlist, entry.item);
+          if (stale) { delete entry.additions[playlistId]; changed = true; }
+        }
+      }
+    }
+    // Derived matches come from the real playlists, so a library edit must repaint
+    // the result rows even when no explicit addition entry changed.
+    const signature = JSON.stringify(Object.values(onlineSearch.platforms).flatMap((record) =>
+      (record.entries || []).map((entry) => [entry.requestId, entry.item.platform, String(entry.item.id), onlineExistingPlaylists(entry)])));
+    if (signature !== onlineExistingSignature) { onlineExistingSignature = signature; changed = true; }
+    if (changed) renderOnlineSearch();
+  }
   function renderSearchTarget() {
     const text = onlineSearch.query ? `搜索「${onlineSearch.query}」` : '';
     byId('online-search-target').textContent = text;
@@ -493,9 +603,10 @@
     if (!searchAddTarget || !byId('search-add-dialog').open) return;
     const { entry } = searchAddTarget;
     const playlists = state.playlists || [];
+    const existing = new Set(onlineExistingPlaylists(entry));
     const select = byId('search-add-playlist');
     const selectedId = select.value || state.activePlaylistId;
-    const signature = JSON.stringify(playlists.map((playlist) => [playlist.id, playlist.name, entry.additions?.[playlist.id]?.status]));
+    const signature = JSON.stringify(playlists.map((playlist) => [playlist.id, playlist.name, entry.additions?.[playlist.id]?.status, existing.has(playlist.id)]));
     if (signature !== searchAddPlaylistSignature) {
       searchAddPlaylistSignature = signature;
       const fragment = document.createDocumentFragment();
@@ -503,7 +614,8 @@
         const option = document.createElement('option');
         option.value = playlist.id;
         const status = entry.additions?.[playlist.id]?.status;
-        const suffix = ({ adding: '加入中…', added: '已加入', exists: '已存在', error: '添加失败' })[status];
+        const suffix = ({ adding: '加入中…', added: '已加入', exists: '已存在', duplicate: '同名同作者', error: '添加失败' })[status]
+          || (existing.has(playlist.id) ? '已存在' : '');
         option.textContent = `${playlist.name}${suffix ? ` · ${suffix}` : ''}`;
         fragment.append(option);
       }
@@ -511,13 +623,14 @@
       select.value = playlists.some((playlist) => playlist.id === selectedId) ? selectedId : playlists.some((playlist) => playlist.id === state.activePlaylistId) ? state.activePlaylistId : playlists[0]?.id || '';
     }
     const addition = entry.additions?.[select.value];
+    const alreadyThere = Boolean(select.value) && existing.has(select.value);
     const status = byId('search-add-status');
-    status.textContent = addition?.error || ({ adding: '加入中…', added: '已加入这个歌单，可继续选择其他歌单', exists: '这个歌单中已存在' })[addition?.status] || (!playlists.length ? '请先创建歌单' : '');
+    status.textContent = addition?.error || ({ adding: '加入中…', added: '已加入这个歌单，可继续选择其他歌单', exists: '这个歌单中已存在', duplicate: '这个歌单中已有同名同作者歌曲，未重复添加' })[addition?.status] || (alreadyThere ? '这个歌单中已存在' : (!playlists.length ? '请先创建歌单' : ''));
     status.hidden = !status.textContent;
     status.classList.toggle('error', addition?.status === 'error');
     select.disabled = !playlists.length;
-    byId('search-add-submit').disabled = !select.value || addition?.status === 'adding';
-    byId('search-add-submit').textContent = addition?.status === 'adding' ? '加入中…' : '加入';
+    byId('search-add-submit').disabled = !select.value || addition?.status === 'adding' || alreadyThere;
+    byId('search-add-submit').textContent = addition?.status === 'adding' ? '加入中…' : alreadyThere ? '已在歌单中' : '加入';
   }
 
   function openSearchAddDialog(platform, entry) {
@@ -545,16 +658,25 @@
       if (!api?.addSearchResult) throw new Error('搜索连接尚未就绪');
       const result = await api.addSearchResult({ requestId: entry.requestId, platform, id: entry.item.id, playlistId });
       if (!result || result.ok === false) throw new Error(searchError(result?.error || '未能加入歌单'));
+      const status = result.status || (Number(result.added) > 0 ? 'added' : Number(result.existingKey) > 0 ? 'exists' : Number(result.duplicateMetadata) > 0 ? 'duplicate' : '');
+      if (!['added', 'exists', 'duplicate'].includes(status)) throw new Error('加入未完成，请重试');
       if (serial !== onlineSearch.serial || !byId('online-search-dialog').open) return;
-      addition.status = Number(result.added) > 0 ? 'added' : 'exists';
-      addition.message = addition.status === 'added' ? `已加入「${playlist.name}」` : `「${playlist.name}」中已存在`;
+      addition.status = status;
+      addition.key = typeof result.key === 'string' ? result.key : '';
+      addition.message = status === 'added' ? `已加入「${playlist.name}」`
+        : status === 'exists' ? `「${playlist.name}」中已存在`
+        : `「${playlist.name}」中已有同名同作者歌曲，未重复添加`;
       onlineMessage(addition.message);
+      showNotice(addition.message);
+      renderOnlineSearch();
       if (searchAddTarget?.entry === entry && searchAddTarget.serial === serial && byId('search-add-playlist').value === playlistId) byId('search-add-dialog').close();
     } catch (error) {
       if (serial !== onlineSearch.serial || !byId('online-search-dialog').open) return;
       addition.status = 'error';
       addition.error = searchError(error);
-      if (!byId('search-add-dialog').open || searchAddTarget?.entry !== entry || byId('search-add-playlist').value !== playlistId) onlineMessage(`未能加入「${playlist.name}」：${addition.error}`, true);
+      onlineMessage(`未能加入「${playlist.name}」：${addition.error}`, true);
+      showNotice(`未能加入「${playlist.name}」：${addition.error}`, true);
+      renderOnlineSearch();
     }
     if (serial === onlineSearch.serial && byId('online-search-dialog').open) renderSearchAddDialog();
   }
@@ -830,7 +952,7 @@
     if (!onlineSearch.query) {
       const empty = document.createElement('div');
       empty.className = 'online-search-empty';
-      empty.textContent = '输入歌名或作者';
+      empty.textContent = '输入歌名或作者，在线查找 QQ 音乐、网易云和 Bilibili 的歌曲';
       fragment.append(empty);
       byId('online-search-results').replaceChildren(fragment);
       return;
@@ -885,8 +1007,15 @@
           const duration = document.createElement('span');
           duration.className = 'online-result-duration';
           duration.textContent = Number(item.durationMs) > 0 ? time(item.durationMs) : '—';
-          const add = createButton('＋', `选择歌单添加 ${item.title || '歌曲'}`, 'online-result-add', () => openSearchAddDialog(platform, entry));
+          const summary = onlineAdditionSummary(entry);
+          const detail = [summary.joined ? `已加入 ${summary.joined} 个歌单` : '', summary.duplicate ? '同名同作者已存在' : '', summary.failed ? '上次添加失败，可重试' : ''].filter(Boolean).join('；');
+          const add = createButton(summary.adding ? '…' : summary.joined ? '✓' : '＋',
+            `选择歌单添加 ${item.title || '歌曲'}${detail ? `（${detail}）` : ''}`,
+            'online-result-add' + (summary.joined ? ' added-online-result' : ''), () => openSearchAddDialog(platform, entry));
           add.dataset.testid = 'online-result-add';
+          add.dataset.added = String(summary.joined);
+          add.dataset.duplicate = summary.duplicate ? 'true' : 'false';
+          add.dataset.failed = summary.failed ? 'true' : 'false';
           const play = createButton(entry.previewing ? '…' : '▶', `播放 ${item.title || '歌曲'}`, 'online-result-play', () => playOnlineResult(platform, entry));
           play.dataset.testid = 'online-result-play';
           play.disabled = Boolean(entry.previewing);
@@ -901,7 +1030,7 @@
         status.classList.toggle('error', Boolean(record.error));
         const message = document.createElement('span');
         message.setAttribute('role', 'status');
-        message.textContent = record.status === 'loading' ? '加载中…' : record.error ? '暂时无法搜索' : '没有找到结果';
+        message.textContent = record.status === 'loading' ? '加载中…' : record.error ? '暂时无法搜索' : '该平台暂无匹配结果，可换关键词或查看原站';
         message.title = record.error || '';
         status.append(message);
         if (record.error || record.status === 'ready' && !record.entries.length) {
@@ -1016,9 +1145,10 @@
     byId('track-table').hidden = visible.length === 0;
     byId('empty-state').hidden = visible.length > 0;
     if (!visible.length) {
-      byId('empty-title').textContent = ordered.length ? '没有匹配的歌曲' : '还没有歌曲';
+      byId('empty-title').textContent = ordered.length ? '当前歌单中没有匹配的歌曲' : '当前歌单还没有歌曲';
       byId('empty-description').replaceChildren();
-      byId('empty-description').textContent = ordered.length ? '换个关键词，或查看全部' : '粘贴链接导入';
+      byId('empty-description').hidden = false;
+      byId('empty-description').textContent = ordered.length ? '试试其他关键词或平台筛选。查找未添加的歌曲，请使用“在线搜索”。' : '可导入歌曲，或通过“在线搜索”查找 QQ 音乐、网易云和 Bilibili 的歌曲。';
       byId('focus-import').hidden = ordered.length > 0;
     }
     if (signature === previousListSignature) return;
@@ -1165,9 +1295,11 @@
     }
     renderVideoPanel();
     renderPlaylists();
+    reconcileOnlineAdditions();
     renderSearchAddDialog();
     renderList();
     const current = currentTrack();
+    coverBackground.update(state);
     renderQuality(current);
     byId('current-title').textContent = current ? displayName(current) : '选择歌曲播放';
     byId('current-title').title = current ? displayName(current) : '';
@@ -1180,6 +1312,7 @@
     byId('current-video').hidden = current?.platform !== 'bilibili';
     byId('open-source').disabled = !current;
     byId('current-cover').disabled = !current;
+    byId('locate-playing').title = window.mixTunesLocatePlaying.target(state).message || '跳回来源歌单，清除筛选并定位当前歌曲';
     const coverKey = current ? `${current.key}|${current.coverUrl || ''}` : '';
     if (coverKey !== previousCoverKey) {
       coverImage(byId('current-cover'), current);
@@ -1232,6 +1365,7 @@
     lastError = state.error || '';
     if (state.notice && state.notice !== lastNotice) showNotice(state.notice);
     lastNotice = state.notice || '';
+    finishLocate();
   }
 
   byId('import-button').addEventListener('click', async () => {
@@ -1301,6 +1435,7 @@
     addOnlineResult(searchAddTarget.platform, searchAddTarget.entry, byId('search-add-playlist').value);
   });
   byId('current-cover').addEventListener('click', openLyrics);
+  byId('locate-playing').addEventListener('click', locatePlaying);
   byId('close-lyrics').addEventListener('click', () => byId('lyrics-dialog').close());
   byId('lyrics-dialog').addEventListener('close', () => { lyrics.serial++; lyrics.key = null; lyrics.status = 'idle'; clearTimeout(lyricsFollowTimer); lyricsSeeking = false; });
   byId('lyrics-retry').addEventListener('click', () => loadLyrics());
@@ -1453,6 +1588,7 @@
   byId('quit-app').addEventListener('click', () => command('quit'));
   byId('open-quality-settings').addEventListener('click', () => {
     byId('quality-save-status').textContent = '设置自动保存';
+    sleepTimerPanel?.refresh();
     renderQuality((state.tracks || []).find((track) => track.key === state.currentKey));
     showDialog('quality-dialog');
   });

@@ -1,11 +1,11 @@
 param(
-  [string]$ApkPath = (Join-Path $PSScriptRoot '..\build\MixTunes-android-1.0.0-debug.apk'),
+  [string]$ApkPath = (Join-Path $PSScriptRoot '..\build\MixTunes-android-1.1.0-debug.apk'),
   [string]$AssetsDirectory = (Join-Path $PSScriptRoot '..\web'),
   [string]$VerificationPath = (Join-Path $PSScriptRoot '..\build-verification.json'),
   [string]$DeliverablePath = '',
   [string]$SdkDirectory = (Join-Path $PSScriptRoot '..\sdk'),
-  [string]$ExpectedVersion = '1.0.0',
-  [int]$ExpectedVersionCode = 4,
+  [string]$ExpectedVersion = '1.1.0',
+  [int]$ExpectedVersionCode = 14,
   [string]$ExpectedCertificateSha256 = '',
   [string]$RuntimeReportPath = ''
 )
@@ -36,7 +36,7 @@ $webFiles = @()
 $zip = [IO.Compression.ZipFile]::OpenRead($apk)
 try {
   if ($zip.Entries.FullName -match '(?i)(^|/)signing/|\.(p12|jks|keystore)$') { throw 'Private signing material in APK' }
-  foreach ($name in @('index.html', 'runtime.js', 'styles.css', 'ui.js')) {
+  foreach ($name in @('index.html', 'runtime.js', 'styles.css', 'ui.js', 'cover-background.css')) {
     $entry = $zip.GetEntry('assets/' + $name)
     if ($null -eq $entry) { throw "Missing packaged asset: $name" }
     $stream = $entry.Open()

@@ -95,3 +95,30 @@ test('an external pause or next cancels search playback still awaiting canonical
   const q=await s.search({query:'x',platform:'netease'});const pending=s.play({requestId:q.requestId,platform:'netease',id:'33894312'});await new Promise(resolve=>setImmediate(resolve));s.cancelPlayback();finish({tracks:[{...item(),sourceId:'33894312'}]});
   assert.deepEqual(await pending,{ok:true,canceled:true,message:'已取消此次搜索结果播放'});assert.equal(plays,0);assert.equal(adds,0);s.close();
 });
+test('search add reports explicit added, exists and duplicate outcomes with the canonical key',async()=>{
+  const outcomes=[{added:1,existingKey:0,duplicateMetadata:0},{added:0,existingKey:1,duplicateMetadata:0},{added:0,existingKey:0,duplicateMetadata:1}];
+  let calls=0;
+  const s=make({engine:{snapshot:()=>({playlists:[{id:'playlist',queue:[]}]}),addTracksDetailed:()=>outcomes[calls++]}});
+  const q=await s.search({query:'状态',platform:'netease'});
+  const payload={requestId:q.requestId,platform:'netease',id:'33894312',playlistId:'playlist'};
+  const added=await s.add(payload);assert.equal(added.status,'added');assert.equal(added.key,'netease:33894312');assert.match(added.message,/已加入/);
+  const exists=await s.add(payload);assert.equal(exists.status,'exists');assert.match(exists.message,/已在歌单中/);
+  const duplicate=await s.add(payload);assert.equal(duplicate.status,'duplicate');assert.match(duplicate.message,/同名同作者/);
+  s.close();
+});
+
+test('search add refuses to report success when neither a counter nor the playlist confirms the write',async()=>{
+  let writes=0;
+  const s=make({engine:{snapshot:()=>({playlists:[{id:'playlist',queue:[]}]}),addTracksDetailed:()=>{writes++;return{added:0,existingKey:0,duplicateMetadata:0};}}});
+  const q=await s.search({query:'状态',platform:'netease'});
+  await assert.rejects(s.add({requestId:q.requestId,platform:'netease',id:'33894312',playlistId:'playlist'}),/未生效/);
+  assert.equal(writes,1);
+  s.close();
+});
+
+test('search add keeps canonical import failures as failures',async()=>{
+  const s=make({importResource:async()=>{throw new Error('原站暂时无法读取');}});
+  const q=await s.search({query:'状态',platform:'netease'});
+  await assert.rejects(s.add({requestId:q.requestId,platform:'netease',id:'33894312',playlistId:'playlist'}),/原站暂时无法读取/);
+  s.close();
+});

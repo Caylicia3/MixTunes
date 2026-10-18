@@ -1,16 +1,19 @@
 {
   "name": "mixtunes-player",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Local mixed-platform music playlist player for Windows",
   "private": true,
   "main": "src/main.cjs",
   "author": "MixTunes",
   "license": "MIT",
   "scripts": {
+    "icons:generate": "node ../tools/generate-icons.cjs",
     "start": "electron .",
     "test": "node --test test/*.test.cjs",
+    "test:ui": "node --test test/locate-playing-ui.cjs",
     "smoke": "electron . --smoke-test",
     "dist": "electron-builder --win portable --x64",
+    "dist:zip": "electron-builder --win zip --x64",
     "prepare:electron": "node node_modules/electron/install.js",
     "predist": "npm run prepare:electron"
   },
@@ -38,7 +41,9 @@
       "target": [
         "portable"
       ],
-      "signAndEditExecutable": false,
+      "icon": "ui/icons/app.ico",
+      "signAndEditExecutable": true,
+      "signExecutable": false,
       "artifactName": "MixTunes-${version}-win-${arch}.${ext}"
     },
     "portable": {

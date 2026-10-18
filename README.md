@@ -4,14 +4,16 @@ MixTunes 是一款跨平台歌单播放器，支持在同一份歌单中播放 Q
 
 ## 下载
 
-在 [GitHub Releases](https://github.com/RuiqiuWang/MixTunes/releases/latest) 下载 **v1.0.0** 的安装包：
+在 [GitHub Releases](https://github.com/Caylicia3/MixTunes/releases/latest) 下载个人 Fork 发布的 **v1.1.0** 安装包（候选版本需等待正式发布）：
 
 | 平台 | 文件 | 要求 |
 | --- | --- | --- |
-| Windows | `MixTunes-1.0.0-win-x64.exe` | Windows 10/11，x64 |
-| Android | `MixTunes-Android-1.0.0.apk` | Android 8.0 及以上 |
+| Windows | `MixTunes-1.1.0-win-x64.zip` | Windows 10/11，x64 |
+| Android | `MixTunes-Android-1.1.0.apk` | Android 8.0 及以上 |
 
-Windows 下载后直接运行。Android 需要允许从所用浏览器或文件管理器安装 APK；升级时使用同一来源的安装包覆盖安装。
+Windows 请将 ZIP 完整解压到新目录，再运行其中的 `MixTunes.exe`，不要只取出 EXE。升级前从托盘退出旧程序，保留旧目录和数据目录。Android 需要允许从所用浏览器或文件管理器安装 APK；升级时使用同一来源的安装包覆盖安装。
+
+Windows 点击窗口右上角 X 时只隐藏到系统托盘，播放与队列继续；双击托盘图标或选择“打开播放器”可恢复，托盘菜单的“退出”才会真正结束程序。托盘不可用（如图标缺失或创建失败）时会退回为正常关闭退出。
 
 ## 功能
 
@@ -53,12 +55,12 @@ Android 暂不支持 QQ／网易的官方网页备用播放。QQ 完整授权、
 以下命令在 Windows x64 的 PowerShell 中执行。需要 Git、Node.js **22.12 或以上**及 npm。仓库中的 `app/` 为桌面应用，`android/` 为手机应用。
 
 ```powershell
-git clone https://github.com/RuiqiuWang/MixTunes.git
+git clone https://github.com/Caylicia3/MixTunes.git
 cd MixTunes
 cd app
 npm ci
 npm test
-npm run dist
+npm run dist:zip
 cd ..
 ```
 
@@ -73,12 +75,30 @@ node android/build-web.cjs
 & .\android\native\test-request-control.ps1
 & .\android\native\test-qq-mobile-login.ps1
 node --test android/native/test-video-bootstrap.cjs android/native/test-qq-mobile-choice.cjs
-& .\android\native\build.ps1 -SdkDirectory $env:ANDROID_HOME -VersionName '1.0.0'
+& .\android\native\build.ps1 -SdkDirectory $env:ANDROID_HOME -VersionName '1.1.0' -VersionCode 14 -RequireExistingKey
 ```
 
-Android 输出位于 `android/build/`；脚本会校验 APK 对齐、签名和安装信息。当前构建使用本地 debug 签名。首次构建会在 `android/signing/` 创建密钥，后续构建复用它。不要提交该目录；自行构建的 APK 通常不能覆盖安装签名不同的 Release APK，换签名前请备份歌单。
+Android 输出位于 `android/build/`；脚本会校验 APK 对齐、签名和安装信息。当前构建使用本地 debug 签名。首次构建会在 `android/signing/` 创建密钥，后续构建复用它。不要提交该目录；Fork APK 沿用已有本地签名（证书 SHA-256：`521aecc240daa9ce9f5a526a46bf6a82de72b6b1e03122a1944c1990da25a7ae`），可覆盖同签名旧测试版；不能直接覆盖上游签名不同的 APK。禁止为了升级而自动卸载或清数据。首次自行构建且没有密钥时，只能显式去掉 `-RequireExistingKey` 创建自己的开发密钥，这样生成的包不能覆盖 Fork 发布包。
+
+Android 播放栏提供“定位正在播放”：返回实际来源歌单、清空歌单筛选并突出当前歌曲，保留播放进度和状态。`build-web.cjs` 会把桌面端的定位判断逻辑一起打包；安装 `app` 的开发依赖并生成 Web 包后，可在有 Edge 的 Windows 上运行 `node --test android/locate-playing-ui.cjs`，验证触屏布局、异步定位以及真实运行时与模拟原生桥的交互。该测试不使用个人账号或歌单，不能替代 Android 真机验收。
+
+两端的“筛选当前歌单”只查看当前歌单中已添加的歌曲；“在线搜索”查找 QQ 音乐、网易云和 Bilibili 的歌曲，两者互不限制。安装 `app` 开发依赖后，可在有 Edge 的 Windows 上运行 `node --test tools/search-scope-ui.cjs`，验证本地筛选不发送在线请求、在线搜索仍请求原有三个平台，且不改动播放与歌单数据。
 
 反馈问题时请附应用版本、系统版本、操作步骤和错误提示，并去除账号、私有歌单等个人信息。
+
+当前封面背景默认关闭，可在 Windows“设置”或 Android“设置 → 外观”中开启。它跟随实际播放内容，暂停保留，封面不可用时回到原主题；设置只保存在本机，不随歌单导出。实现、测试与人工验收见 [当前播放封面背景](docs/current-cover-background.md)。
+
+背景设置现支持默认主题、当前封面和自定义本地图片，可拖动/缩放裁剪，共用 0～100% 图片不透明度，并可调节 0～40px 背景模糊度；滑块拖动时实时预览。另有独立的 0～100%「背景遮罩强度」，浅／深色主题分别记忆，默认 88%／90% 保持旧效果；调低遮罩可能降低文字可读性。图片只保存在本机，不随歌单导出；使用方法、尺寸限制和设备验收见 [自定义背景与裁剪](docs/custom-background.md)。
+
+Windows 的“播放器设置”和 Android 的“设置 → 睡眠定时器”支持 15／30／60 分钟预设与 1～240 分钟自定义时长；到点只暂停当前播放，保留当前歌曲、进度和队列，Windows 隐藏到托盘后仍然有效。实现、测试与人工验收范围见 [睡眠定时器](docs/sleep-timer.md)。
+
+Windows 和 Android 统一使用原创「折带播放」图标。可编辑源文件为 `app/assets/icon-source.svg`；修改后在 `app` 目录运行 `npm run icons:generate`，统一生成 Windows ICO、托盘 PNG 和 Android 启动/自适应资源。生成需要已安装的项目开发依赖与 Microsoft Edge，普通打包使用仓库中的现成资源。详细约定与检查命令见 [应用图标维护](docs/app-icons.md)。
+
+## 1.1.0 发布与验证
+
+本轮新增双端定位、搜索范围说明、封面及本地裁剪背景、背景效果预览、原创图标、睡眠定时器和搜索添加反馈，Windows 支持关闭到托盘。最近播放历史和搜索排序未实现，不在本次发布范围。
+
+安装、升级、数据边界和构建验证见 [1.1.0 发布说明](docs/releases/v1.1.0.md)；候选测试记录见 [测试报告](docs/releases/v1.1.0-tests.md)。历史任务文档保留当时的验证状态，最终记录以本轮测试报告为准。
 
 ## 许可
 

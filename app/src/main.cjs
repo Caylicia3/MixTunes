@@ -1,6 +1,6 @@
 'use strict';
 const electron=require('electron');
-const {app,BrowserWindow,ipcMain,session,shell,dialog,globalShortcut,Tray,Menu,nativeImage,protocol,nativeTheme}=electron;
+const {app,BrowserWindow,ipcMain,session,shell,dialog,globalShortcut,Menu,protocol,nativeTheme}=electron;
 const fs=require('node:fs');const path=require('node:path');const {pathToFileURL}=require('node:url');
 const {LibraryStore,normaliseLibrary,safeTrack}=require('./store.cjs');
 const {PlayerEngine,errorMessage}=require('./engine.cjs');
@@ -14,6 +14,9 @@ const {WebPlayer}=require('./web-player.cjs');
 const {VideoPlayer}=require('./video-player.cjs');
 const {fetchWithSession}=require('./session-fetch.cjs');
 const {readQqAuth,readNeteaseAuth,restoredAccountState,inspectAccount}=require('./platform-auth.cjs');
+const {restoreMainWindow,installMainWindowLifecycle}=require('./window-lifecycle.cjs');
+const {trayMenuTemplate,createAppTray}=require('./tray.cjs');
+const {createSleepTimer,validMinutes,shouldPause}=require('./sleep-timer.cjs');
 
 protocol.registerSchemesAsPrivileged([{scheme:'mix-audio',privileges:{standard:true,secure:true,stream:true,supportFetchAPI:true}}]);
 const argValue=name=>process.argv.find(arg=>arg.startsWith(name+'='))?.slice(name.length+1);
@@ -26,7 +29,7 @@ app.setPath('userData',dataDirectory?path.resolve(dataDirectory):path.join(app.g
 app.setPath('sessionData',app.getPath('userData'));
 if(testMode)app.disableHardwareAcceleration();
 app.setName('MixTunes');
-let mainWindow,engine,store,tray,quitting=false,importing=false;
+let mainWindow,engine,store,trayController,quitting=false,importing=false,sleepTimer=null;
 let searchService,lyricsService,playlistShare;
 let accountsTimer=null,accountsRefresh=null,accountsRefreshAgain=false,pendingVideo=null,videoPlayer=null,videoRequestSerial=0;
 const loginWindows=new Map();const contexts=new Map();
@@ -202,13 +205,40 @@ async function command(name,payload={}){
     case'playlist-rename':engine.renamePlaylist(payload.id,payload.name);break;
     case'playlist-delete':await engine.deletePlaylist(payload.id);break;
     case'accounts-refresh':await updateAccounts();return{ok:true,message:'已更新账号状态；如需登录，请打开对应平台的官方登录窗口。'};
-    case'quit':setTimeout(()=>{quitting=true;app.quit();},100);return{ok:true};
+    case'quit':sleepTimer?.cancel();setTimeout(()=>{quitting=true;app.quit();},100);return{ok:true};
     default:throw new Error('不支持的操作');
   }
   return{ok:true};
 }
 function setupIpc(){
+  const backgroundStore=new (require('./background-store.cjs').BackgroundStore)(app.getPath('userData'));
+  handler('app:background',async(action,payload)=>{
+    if(action==='load')return backgroundStore.load();
+    if(action==='save')return backgroundStore.save(payload);
+    if(action==='delete')return backgroundStore.delete();
+    if(action!=='pick')throw new Error('无效背景操作');
+    const result=await dialog.showOpenDialog(mainWindow,{title:'选择本地背景图片',properties:['openFile'],filters:[{name:'静态图片',extensions:['jpg','jpeg','png','webp']}]});
+    if(result.canceled||!result.filePaths.length)return{canceled:true};
+    const handle=await fs.promises.open(result.filePaths[0],'r');
+    try{
+      const size=(await handle.stat()).size;
+      if(size>12*1024*1024)throw new Error('图片须小于 12 MB');
+      const bytes=Buffer.alloc(size),{bytesRead}=await handle.read(bytes,0,size,0);
+      if(bytesRead!==size)throw new Error('无法完整读取图片');
+      const info=require('../ui/background-image.js').inspect(bytes);
+      return{image:`data:${info.mime};base64,${bytes.toString('base64')}`};
+    }finally{await handle.close();}
+  });
   handler('app:state',()=>engine.snapshot());handler('app:import-links',importLinks);handler('app:command',command);
+  handler('app:sleep-timer',async(action,payload={})=>{
+    if(action==='get')return{ok:true,...sleepTimerState()};
+    if(action==='cancel'){sleepTimer.cancel();return{ok:true,...publishSleepTimer()};}
+    if(action==='set'){
+      if(!validMinutes(payload?.minutes))throw new Error('睡眠定时器需为 1～240 分钟的整数');
+      sleepTimer.startMinutes(payload.minutes);return{ok:true,...publishSleepTimer()};
+    }
+    throw new Error('无效的睡眠定时器操作');
+  });
   handler('app:search',payload=>searchService.search(payload));
   handler('app:search-add',payload=>searchService.add(payload));
   handler('app:search-play',payload=>{pendingVideo=null;videoRequestSerial++;return searchService.play(payload);});
@@ -241,17 +271,30 @@ function setupIpc(){
     return importLinks(text);
   });
 }
+function sleepTimerState(){return sleepTimer?.snapshot()||{active:false,endsAt:null,remainingMs:0,minutes:null};}
+function publishSleepTimer(state=sleepTimerState()){if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('app:sleep-timer',state);return state;}
+async function expireSleepTimer(){
+  const status=engine?.state.status;const pause=shouldPause(status);
+  app.__mixSleepTestLog?.push({type:'sleep-timer-expire',status:status||null,pause,at:Date.now()});
+  publishSleepTimer();
+  if(!pause)return;
+  try{await engine.pause();record({type:'sleep-timer-pause',status});}catch(error){record({type:'sleep-timer-pause-error',message:errorMessage(error)});}
+  publishSleepTimer();
+}
 function setupTray(){
-  const iconPath=path.join(__dirname,'../ui/tray.png');
-  if(!fs.existsSync(iconPath))return;
-  tray=new Tray(nativeImage.createFromPath(iconPath));tray.setToolTip('MixTunes');
-  tray.setContextMenu(Menu.buildFromTemplate([
-    {label:'打开播放器',click:()=>{mainWindow.show();mainWindow.focus();}},
-    {label:'播放 / 暂停',click:()=>command(engine.state.status==='playing'?'pause':'play').catch(()=>{})},
-    {label:'下一首',click:()=>command('next').catch(()=>{})},
-    {type:'separator'}, {label:'退出',click:()=>{quitting=true;app.quit();}}
-  ]));
-  tray.on('double-click',()=>{mainWindow.show();mainWindow.focus();});
+  if(!trayController)trayController=createAppTray({
+    electron,
+    iconPath:path.join(__dirname,'../ui/tray.png'),
+    template:()=>trayMenuTemplate({
+      onRestore:()=>restoreMainWindow(mainWindow),
+      onToggle:()=>command(engine.state.status==='playing'?'pause':'play').catch(()=>{}),
+      onNext:()=>command('next').catch(()=>{}),
+      onQuit:()=>{quitting=true;app.quit();}
+    }),
+    restore:()=>restoreMainWindow(mainWindow),
+    record
+  });
+  return Boolean(trayController.ensure());
 }
 async function start(){
   store=new LibraryStore(app.getPath('userData'));const library=store.load();
@@ -260,18 +303,32 @@ async function start(){
   const web=new WebPlayer({electron,sessionFor,onEvent:event=>engine?.onEvent({...event,backend:'web'})});
   const video=new VideoPlayer({electron,sessionFor,getHostWindow:()=>mainWindow,onEvent:event=>engine?.onEvent({...event,backend:'video'})});videoPlayer=video;
   engine=new PlayerEngine({library,resolveTrack,contextFor,audio,web,video,persist:state=>store.save(state),record});
+  sleepTimer=createSleepTimer({onExpire:()=>{expireSleepTimer().catch(()=>{});}});
+  if(testMode)app.__mixSleepTest={
+    startSeconds:seconds=>{sleepTimer.startMs(Number(seconds)*1000);return publishSleepTimer();},
+    state:()=>sleepTimerState(),
+    forceStatus:status=>{engine.state.status=status;engine.publish();return engine.state.status;},
+    status:()=>engine.state.status,
+    snapshot:()=>engine.snapshot(),
+    log:app.__mixSleepTestLog=[]
+  };
   searchService=new SearchService({searchPlatform,contextFor,importResource,parseInput,safeTrack,engine});
   lyricsService=new LyricsService({engine,contextFor});
   playlistShare=new PlaylistShare({getLibrary:()=>engine.snapshot(),apkPath:()=>path.join(process.env.PORTABLE_EXECUTABLE_DIR||path.dirname(app.getPath('exe')),`MixTunes-Android-${app.getVersion()}.apk`)});
   nativeTheme.themeSource='light';
-  mainWindow=new BrowserWindow({title:'MixTunes',width:1240,height:840,minWidth:960,minHeight:680,show:!testMode&&!smokeTest,
+  mainWindow=new BrowserWindow({title:'MixTunes',icon:path.join(__dirname,'../ui/icons/app.ico'),width:1240,height:840,minWidth:960,minHeight:680,show:!testMode&&!smokeTest,
     backgroundColor:'#ffffff',autoHideMenuBar:true,webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
   Menu.setApplicationMenu(null);
   mainWindow.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   mainWindow.webContents.on('will-navigate',(event,url)=>{if(url!==pathToFileURL(uiPath).href)event.preventDefault();});
-  // A hidden or disabled Windows tray must never make the player impossible to
-  // exit. Closing the visible player also closes its audio/login windows.
-  mainWindow.on('closed',()=>{if(!quitting){quitting=true;app.quit();}});
+  // Hide on close while the tray exists so playback keeps running; fall back to
+  // a real close when it does not, so a missing tray can never strand the app.
+  installMainWindowLifecycle(mainWindow,{
+    trayAvailable:()=>Boolean(trayController?.available()),
+    isQuitting:()=>quitting,
+    onQuit:()=>{quitting=true;app.quit();},
+    onFirstHide:()=>{try{trayController?.get()?.displayBalloon?.({title:'MixTunes',content:'MixTunes 已在后台运行，可从系统托盘重新打开。',iconType:'info'});}catch{}}
+  });
   engine.on('state',state=>{if(!mainWindow.isDestroyed())mainWindow.webContents.send('app:state',state);});
   engine.on('notice',notice=>{if(!mainWindow.isDestroyed())mainWindow.webContents.send('app:notice',notice);});
   setupIpc();await mainWindow.loadFile(uiPath);setupTray();await updateAccounts();
@@ -280,19 +337,20 @@ async function start(){
     try{globalShortcut.register(key,()=>action().catch(()=>{}));}catch{}
   }
   record({type:'app-ready',version:app.getVersion(),testMode});
+
   if(smokeTest){
-    fs.writeFileSync(path.join(app.getPath('userData'),'smoke-result.json'),JSON.stringify({ok:true,version:app.getVersion(),packaged:app.isPackaged,uiUrl:mainWindow.webContents.getURL(),at:new Date().toISOString()}));
+    fs.writeFileSync(path.join(app.getPath('userData'),'smoke-result.json'),JSON.stringify({ok:true,version:app.getVersion(),packaged:app.isPackaged,trayAvailable:Boolean(trayController?.available()),uiUrl:mainWindow.webContents.getURL(),at:new Date().toISOString()}));
     setTimeout(()=>{quitting=true;app.quit();},1200);
   }
 }
 if(!testMode&&!app.requestSingleInstanceLock()){app.quit();}
 else{
-  app.on('second-instance',()=>{mainWindow?.show();mainWindow?.focus();});
+  app.on('second-instance',()=>restoreMainWindow(mainWindow));
   app.whenReady().then(start).catch(error=>{record({type:'startup-error',message:errorMessage(error)});if(!testMode)dialog.showErrorBox('MixTunes 启动失败',errorMessage(error));app.exit(1);});
 }
 app.on('window-all-closed',()=>app.quit());
 app.on('before-quit',()=>{
-  quitting=true;clearTimeout(accountsTimer);globalShortcut.unregisterAll();searchService?.close();playlistShare?.stop();if(engine){try{store.save(engine.snapshot());}catch{}engine.close();}
+  quitting=true;clearTimeout(accountsTimer);globalShortcut.unregisterAll();sleepTimer?.cancel();searchService?.close();playlistShare?.stop();if(engine){try{store.save(engine.snapshot());}catch{}engine.close();}
   for(const window of loginWindows.values())if(!window.isDestroyed())window.destroy();
-  tray?.destroy();
+  trayController?.destroy();
 });
