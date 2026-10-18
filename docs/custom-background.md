@@ -56,6 +56,12 @@ Windows 运行测试启动真实打包程序和真实存储，但模拟了文件
 
 人工步骤：两端分别选择横/竖图，拖动缩放、取消、确认、再裁剪、更换、删除；移走原图并重启；在当前封面与自定义间切换后调整 0/50/100%；检查 QQ/网易云/Bilibili 封面、切歌/暂停、浅深色、小屏、横屏、平板；Windows 验证托盘持续播放和原生菜单。Android 在签名兼容环境安装测试，不为安装卸载或清除原应用数据。
 
-本分支从 C 第一阶段 5fe9972 建立，以该分支为 PR base；任务 E 的已提交、已验收图标分支保留，当前测试包没有合入 E，不宣称验证了 E 的整合效果。产物分别保存到新的 task-c2 目录，不覆盖旧包。
+## 与任务 E 的集成状态
+
+本分支最初从 C 第一阶段 5fe9972 建立。2026-10-18 已通过合并提交 `1e94f55` 将任务 E 的原创应用图标（分支 `fix/mixtunes-original-app-icon`，提交 `795f215`）合并进来，因此当前分支同时包含「原创图标」与「自定义背景」，PR #12 的 base 也调整为任务 E 分支。集成只手工解决了 `README.md` 的一处说明冲突；`app/src/main.cjs` 自动合并后，任务 E 的窗口图标、第二阶段的背景 IPC 与任务 D 的托盘/窗口生命周期同时保留。
+
+需要区分测试包：历史产物 `.local-build/task-c2-*` 与 `.local-build/task-e-*` 都是在集成前分别构建的，前者不含任务 E、后者不含第二阶段，不能用来判断集成效果。集成后的 Windows ZIP 与 Android APK 位于 `.local-build/task-e-c2-integrated/`，请使用该目录验证。
+
+集成包目前只完成自动化测试与构建校验（Node/UI/Electron 回归、EXE 图标资源比对、打包冒烟、APK 对齐与签名校验、Web 资产哈希比对）。Windows 与 Android 的真实设备人工验收尚未进行，自动化结果不能视为人工验收完成。
 
 参考：[createImageBitmap 方向处理](https://developer.mozilla.org/en-US/docs/Web/API/Window/createImageBitmap)、[Android 系统文件选择](https://developer.android.com/training/data-storage/shared/documents-files)、[WebView 资源拦截](https://developer.android.com/reference/android/webkit/WebViewClient#shouldInterceptRequest(android.webkit.WebView,%20android.webkit.WebResourceRequest))。
