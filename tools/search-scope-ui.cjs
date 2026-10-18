@@ -26,9 +26,10 @@ test('desktop and Android keep library filters separate from online searches', a
       if (url.origin !== 'http://mixtunes.test') return route.abort();
       const file = url.pathname.slice(1) || 'index.html';
       const dir = mobile ? 'android/web' : 'app/ui';
-      if (!['index.html', 'styles.css', 'ui.js', 'app.js', 'theme.js', 'runtime.js', 'locate-playing.js'].includes(file)) return route.abort();
+      if (!['index.html', 'styles.css', 'cover-background.css', 'cover-background.js', 'ui.js', 'app.js', 'theme.js', 'runtime.js', 'locate-playing.js'].includes(file)) return route.abort();
       const source = mobile && file === 'runtime.js' ? 'app/ui/locate-playing.js' : `${dir}/${file}`;
-      return route.fulfill({ body: fs.readFileSync(path.resolve(__dirname, '..', source)), contentType: file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css' : 'application/javascript' });
+      const body = fs.readFileSync(path.resolve(__dirname, '..', source)) + (mobile && file === 'runtime.js' ? '\n' + fs.readFileSync(path.resolve(__dirname, '../app/ui/cover-background.js')) : '');
+      return route.fulfill({ body, contentType: file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css' : 'application/javascript' });
     });
     await page.addInitScript(snapshot => {
       window.fixtureState = snapshot; window.calls = []; window.searchCalls = []; window.searchMode = 'results';

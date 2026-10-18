@@ -35,6 +35,12 @@
   let nativeDialogDepth = 0;
   let noticeTimer = null;
   let pendingLocate = null;
+  const coverBackground = window.mixTunesCoverBackground.create({
+    container: byId('cover-background'),
+    onStorageError: () => { byId('cover-background-setting-status').textContent = '当前环境无法保存设置，仅本次有效。'; },
+  });
+  byId('cover-background-enabled').checked = coverBackground.enabled();
+  byId('cover-background-enabled').addEventListener('change', (event) => coverBackground.setEnabled(event.target.checked));
   let lyrics = { serial: 0, key: null, status: 'idle', lines: [], activeIndex: -1, manualUntil: 0, manualRevision: 0, coverKey: '' };
   let lyricsFollowTimer = null;
   let lyricsSeeking = false;
@@ -1222,6 +1228,7 @@
     renderSearchAddDialog();
     renderList();
     const current = currentTrack();
+    coverBackground.update(state);
     renderQuality(current);
     byId('current-title').textContent = current ? displayName(current) : '选择歌曲播放';
     byId('current-title').title = current ? displayName(current) : '';
