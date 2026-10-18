@@ -25,6 +25,7 @@
   let playlistDialogAction = null;
   let playlistMenuTargetId = null;
   let searchAddTarget = null;
+  let onlineExistingSignature = '';
   let searchAddPlaylistSignature = '';
   let importing = false;
   let renameTrackKey = null;
@@ -526,11 +527,18 @@
     const tracks = new Map((state.tracks || []).map((track) => [track.key, track]));
     return (playlist.queue || []).some((key) => onlineMetadataIdentity(tracks.get(key)?.title, tracks.get(key)?.artist) === identity);
   }
+  function onlineExistingPlaylists(entry) {
+    return window.mixTunesSearchMatch?.playlistsContaining(state.playlists || [], state.tracks || [], entry.item) || [];
+  }
   function onlineAdditionSummary(entry) {
     const additions = Object.values(entry.additions || {});
+    const joinedIds = new Set(onlineExistingPlaylists(entry));
+    for (const [playlistId, addition] of Object.entries(entry.additions || {})) {
+      if (addition.status === 'added' || addition.status === 'exists') joinedIds.add(playlistId);
+    }
     return {
       adding: additions.some((addition) => addition.status === 'adding'),
-      joined: additions.filter((addition) => addition.status === 'added' || addition.status === 'exists').length,
+      joined: joinedIds.size,
       duplicate: additions.some((addition) => addition.status === 'duplicate'),
       failed: additions.some((addition) => addition.status === 'error')
     };
@@ -549,6 +557,11 @@
         }
       }
     }
+    // Derived matches come from the real playlists, so a library edit must repaint
+    // the result rows even when no explicit addition entry changed.
+    const signature = JSON.stringify(Object.values(onlineSearch.platforms).flatMap((record) =>
+      (record.entries || []).map((entry) => [entry.requestId, entry.item.platform, String(entry.item.id), onlineExistingPlaylists(entry)])));
+    if (signature !== onlineExistingSignature) { onlineExistingSignature = signature; changed = true; }
     if (changed) renderOnlineSearch();
   }
   function renderSearchTarget() {
@@ -590,9 +603,10 @@
     if (!searchAddTarget || !byId('search-add-dialog').open) return;
     const { entry } = searchAddTarget;
     const playlists = state.playlists || [];
+    const existing = new Set(onlineExistingPlaylists(entry));
     const select = byId('search-add-playlist');
     const selectedId = select.value || state.activePlaylistId;
-    const signature = JSON.stringify(playlists.map((playlist) => [playlist.id, playlist.name, entry.additions?.[playlist.id]?.status]));
+    const signature = JSON.stringify(playlists.map((playlist) => [playlist.id, playlist.name, entry.additions?.[playlist.id]?.status, existing.has(playlist.id)]));
     if (signature !== searchAddPlaylistSignature) {
       searchAddPlaylistSignature = signature;
       const fragment = document.createDocumentFragment();
@@ -600,7 +614,8 @@
         const option = document.createElement('option');
         option.value = playlist.id;
         const status = entry.additions?.[playlist.id]?.status;
-        const suffix = ({ adding: '加入中…', added: '已加入', exists: '已存在', duplicate: '同名同作者', error: '添加失败' })[status];
+        const suffix = ({ adding: '加入中…', added: '已加入', exists: '已存在', duplicate: '同名同作者', error: '添加失败' })[status]
+          || (existing.has(playlist.id) ? '已存在' : '');
         option.textContent = `${playlist.name}${suffix ? ` · ${suffix}` : ''}`;
         fragment.append(option);
       }
@@ -608,13 +623,14 @@
       select.value = playlists.some((playlist) => playlist.id === selectedId) ? selectedId : playlists.some((playlist) => playlist.id === state.activePlaylistId) ? state.activePlaylistId : playlists[0]?.id || '';
     }
     const addition = entry.additions?.[select.value];
+    const alreadyThere = Boolean(select.value) && existing.has(select.value);
     const status = byId('search-add-status');
-    status.textContent = addition?.error || ({ adding: '加入中…', added: '已加入这个歌单，可继续选择其他歌单', exists: '这个歌单中已存在', duplicate: '这个歌单中已有同名同作者歌曲，未重复添加' })[addition?.status] || (!playlists.length ? '请先创建歌单' : '');
+    status.textContent = addition?.error || ({ adding: '加入中…', added: '已加入这个歌单，可继续选择其他歌单', exists: '这个歌单中已存在', duplicate: '这个歌单中已有同名同作者歌曲，未重复添加' })[addition?.status] || (alreadyThere ? '这个歌单中已存在' : (!playlists.length ? '请先创建歌单' : ''));
     status.hidden = !status.textContent;
     status.classList.toggle('error', addition?.status === 'error');
     select.disabled = !playlists.length;
-    byId('search-add-submit').disabled = !select.value || addition?.status === 'adding';
-    byId('search-add-submit').textContent = addition?.status === 'adding' ? '加入中…' : '加入';
+    byId('search-add-submit').disabled = !select.value || addition?.status === 'adding' || alreadyThere;
+    byId('search-add-submit').textContent = addition?.status === 'adding' ? '加入中…' : alreadyThere ? '已在歌单中' : '加入';
   }
 
   function openSearchAddDialog(platform, entry) {

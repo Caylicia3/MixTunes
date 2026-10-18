@@ -20,7 +20,7 @@ test('search add feedback and result state stay in sync on Windows and Android',
   const browser = await chromium.launch({ channel: process.env.MIXTUNES_TEST_BROWSER || 'msedge', headless: true });
   t.after(() => browser.close());
 
-  async function fixture(mobile) {
+  async function fixture(mobile, snapshot = STATE) {
     const page = await browser.newPage({ viewport: mobile ? { width: 390, height: 760 } : { width: 960, height: 680 }, isMobile: mobile, hasTouch: mobile });
     t.after(() => page.close());
     const errors = [];
@@ -30,7 +30,7 @@ test('search add feedback and result state stay in sync on Windows and Android',
       const url = new URL(route.request().url());
       if (url.origin !== 'http://mixtunes.test') return route.abort();
       const file = url.pathname.slice(1) || 'index.html';
-      if (mobile && file === 'runtime.js') return route.fulfill({ contentType: 'application/javascript', body: ['locate-playing.js', 'cover-background.js', 'background-image.js', 'background-settings.js', 'sleep-timer.js'].map((name) => read('app/ui/' + name)).join('\n') });
+      if (mobile && file === 'runtime.js') return route.fulfill({ contentType: 'application/javascript', body: ['locate-playing.js', 'cover-background.js', 'background-image.js', 'background-settings.js', 'sleep-timer.js', 'search-match.js'].map((name) => read('app/ui/' + name)).join('\n') });
       const dir = mobile ? 'android/web' : 'app/ui';
       const source = file === 'cover-background.css' ? path.join(root, 'app/ui', file) : path.join(root, dir, file);
       if (!fs.existsSync(source)) return route.abort();
@@ -51,7 +51,8 @@ test('search add feedback and result state stay in sync on Windows and Android',
         onSleepTimer: () => () => {},
         search: async (payload) => {
           window.searchCalls.push(payload);
-          const item = { id: payload.platform + '-1', platform: payload.platform, title: '搜索结果 ' + payload.platform, artist: '搜索作者', durationMs: 180000, coverUrl: '' };
+          const ids = { qq: '0016IKty1sTxqi', netease: '33894312', bilibili: 'BV17x411w7KC' };
+          const item = { id: ids[payload.platform], platform: payload.platform, title: '搜索结果 ' + payload.platform, artist: '搜索作者', durationMs: 180000, coverUrl: '' };
           return { ok: true, requestId: 'batch-' + payload.platform, results: [{ platform: payload.platform, ok: true, items: [item], total: 1, hasMore: false }] };
         },
         addSearchResult: async (payload) => {
@@ -62,7 +63,7 @@ test('search add feedback and result state stay in sync on Windows and Android',
           return { ok: true, status: 'added', added: 1, existingKey: 0, duplicateMetadata: 0, key: 'key-' + payload.playlistId, playlistId: payload.playlistId };
         }
       };
-    }, STATE);
+    }, snapshot);
     await page.goto('http://mixtunes.test/');
     await page.waitForFunction(mobile ? () => window.mobileUI : () => document.getElementById('connection-status').textContent === '已就绪');
     return page;
@@ -83,6 +84,7 @@ test('search add feedback and result state stay in sync on Windows and Android',
     return page.locator('.online-result').first();
   }
   const addButton = (row, mobile) => mobile ? row.locator('.result-add') : row.locator('[data-testid="online-result-add"]');
+  const rowFor = (page, mobile, platform) => page.locator(`${mobile ? '.search-result' : '.online-result'}[data-platform="${platform}"]`).first();
   async function openTarget(page, row, mobile) {
     await addButton(row, mobile).click();
     if (mobile) await page.locator('[data-target-add]').first().waitFor();
@@ -212,6 +214,75 @@ test('search add feedback and result state stay in sync on Windows and Android',
         const button = m ? document.querySelector('.search-result .result-add') : document.querySelector('[data-testid="online-result-add"]');
         return button && button.dataset.added;
       }, mobile), '0');
+    });
+
+    await t.test(client + ': songs already in the library show as added on first search', async () => {
+      const ids = { qq: '0016IKty1sTxqi', netease: '33894312', bilibili: 'BV17x411w7KC' };
+      const localTracks = [
+        { key: 'qq:' + ids.qq, platform: 'qq', sourceId: ids.qq, title: '同一首歌', artist: '同一作者', url: 'https://y.qq.com/n/ryqq/songDetail/' + ids.qq },
+        { key: 'netease:' + ids.netease, platform: 'netease', sourceId: ids.netease, title: '同一首歌', artist: '同一作者', url: 'https://music.163.com/song?id=' + ids.netease },
+        { key: 'bilibili:' + ids.bilibili + ':12345', platform: 'bilibili', sourceId: ids.bilibili, title: '同一首歌', artist: '同一作者', url: 'https://www.bilibili.com/video/' + ids.bilibili }
+      ];
+      const queues = localTracks.map((track) => track.key);
+      const preloaded = { ...STATE, tracks: localTracks,
+        playlists: [{ id: 'a', name: '歌单 A', queue: queues }, { id: 'b', name: '歌单 B', queue: queues }],
+        queue: queues, currentKey: localTracks[0].key, currentTrack: localTracks[0], playbackQueue: queues, playbackPlaylistId: 'a' };
+      const page = await fixture(mobile, preloaded);
+      await search(page, mobile);
+      for (const platform of ['qq', 'netease', 'bilibili']) {
+        const row = rowFor(page, mobile, platform);
+        await row.waitFor();
+        await page.waitForFunction(({ mobile: isMobile, platform: name }) => {
+          const button = isMobile ? document.querySelector(`.search-result[data-platform="${name}"] .result-add`) : document.querySelector(`.online-result[data-platform="${name}"] [data-testid="online-result-add"]`);
+          return button && button.dataset.added === '2';
+        }, { mobile, platform });
+        assert.equal(await icon(row, mobile), '✓');
+      }
+      assert.equal(await page.evaluate(() => window.addCalls.length), 0, 'no network add or import required');
+      const netease = rowFor(page, mobile, 'netease');
+      await openTarget(page, netease, mobile);
+      if (mobile) {
+        assert.equal(await page.locator('[data-target-add="a"]').textContent(), '已存在');
+        assert.equal(await page.locator('[data-target-add="b"]').textContent(), '已存在');
+      } else {
+        const options = await page.locator('#search-add-playlist option').allTextContents();
+        assert.equal(options.filter((text) => /歌单 [AB] · 已存在/.test(text)).length, 2);
+        assert.equal(await page.locator('#search-add-submit').isDisabled(), true);
+      }
+      await closeTarget(page, mobile);
+      await page.evaluate(() => {
+        const next = structuredClone(window.fixtureState);
+        next.playlists = next.playlists.map((playlist) => playlist.id === 'a' ? { ...playlist, queue: playlist.queue.filter((key) => key !== 'netease:33894312') } : playlist);
+        window.stateListener(next);
+      });
+      await page.waitForFunction((m) => {
+        const button = m ? document.querySelector('.search-result[data-platform="netease"] .result-add') : document.querySelector('.online-result[data-platform="netease"] [data-testid="online-result-add"]');
+        return button && button.dataset.added === '1';
+      }, mobile);
+      assert.equal(await icon(netease, mobile), '✓');
+      await page.evaluate(() => {
+        const next = structuredClone(window.fixtureState);
+        next.playlists = next.playlists.map((playlist) => ({ ...playlist, queue: playlist.queue.filter((key) => key !== 'netease:33894312') }));
+        window.stateListener(next);
+      });
+      await page.waitForFunction((m) => {
+        const button = m ? document.querySelector('.search-result[data-platform="netease"] .result-add') : document.querySelector('.online-result[data-platform="netease"] [data-testid="online-result-add"]');
+        return button && button.dataset.added === '0';
+      }, mobile);
+      assert.equal(await icon(netease, mobile), '＋');
+    });
+
+    await t.test(client + ': same title and artist from another source is not marked as added', async () => {
+      const local = { key: 'qq:otherMid123', platform: 'qq', sourceId: 'otherMid123', title: '搜索结果 qq', artist: '搜索作者', url: 'https://y.qq.com/n/ryqq/songDetail/otherMid123' };
+      const page = await fixture(mobile, { ...STATE, tracks: [local], playlists: [{ id: 'a', name: '歌单 A', queue: [local.key] }], queue: [local.key], currentKey: local.key, currentTrack: local, playbackQueue: [local.key] });
+      await search(page, mobile);
+      const row = rowFor(page, mobile, 'qq');
+      await row.waitFor();
+      assert.equal(await page.evaluate((m) => {
+        const button = m ? document.querySelector('.search-result[data-platform="qq"] .result-add') : document.querySelector('.online-result[data-platform="qq"] [data-testid="online-result-add"]');
+        return button && button.dataset.added;
+      }, mobile), '0');
+      assert.equal(await icon(row, mobile), '＋');
     });
   }
 });
