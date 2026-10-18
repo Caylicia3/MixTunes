@@ -43,13 +43,22 @@ final class SleepTimerHost {
     private static void expire() {
         try {
             AudioController audio = PlaybackService.audio(context);
-            audio.pauseAll();
-            audio.command("pause", null);
+            // A manually paused player must not receive another pause, and it must
+            // never be resumed. Only an actively playing audio entry is paused here.
+            if (SleepTimerPolicy.shouldPauseAudio(audio.playing())) audio.pauseAll();
+            MainActivity activity = MainActivity.current();
+            if (activity != null && SleepTimerPolicy.shouldNotifyWebView(true)) activity.onSleepTimerExpired();
             PlaybackService.refresh();
         } catch (Exception ignored) {
             // Playback may already be released; the timer is still cleared.
         }
     }
+
+    /** Resolves a deadline that passed while the device was suspended. */
+    static void checkExpired(Context source) { timer(source).expireIfDue(true); }
+
+    /** Clears a passed deadline before starting new playback without pausing it. */
+    static void clearIfExpired(Context source) { timer(source).expireIfDue(false); }
 
     static JSONObject start(Context source, int minutes) {
         SleepTimer value = timer(source);
@@ -63,6 +72,7 @@ final class SleepTimerHost {
 
     static JSONObject state(Context source) {
         SleepTimer value = timer(source);
+        value.expireIfDue(true);
         boolean active = value.active();
         long remaining = value.remaining();
         return Json.object(

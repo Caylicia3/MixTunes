@@ -5,7 +5,7 @@
   const {parseInput,importResource,resolveTrack}=req('./providers.cjs'),{searchPlatform}=req('./search-providers.cjs'),{SearchService,searchUrl}=req('./search-service.cjs');
   const {readQqAuth,readNeteaseAuth,restoredAccountState,inspectAccount}=req('./platform-auth.cjs');
   const {LyricsService}=req('./lyrics.cjs'),{normaliseShareLink}=req('./share-link.cjs');
-  const {mergeTransferredLibrary}=req('./playlist-transfer.cjs');
+  const {mergeTransferredLibrary}=req('./playlist-transfer.cjs'),{shouldPause}=req('./sleep-timer.cjs');
   const stateListeners=new Set(),noticeListeners=new Set(),contexts=new Map();
   let engine,searchService,lyricsService,importing=false,saveQueue=Promise.resolve(),accountsPromise=null,accountsRefreshAgain=false,pendingVideo=null,videoRequest=0,transportRequest=0,savedAt=0;
   const libraryKey='mixtunes-library-v2';
@@ -181,6 +181,12 @@
       if(['audio','video','web'].includes(event?.type)&&event.event)engine.onEvent({...event.event,backend:event.type});
       else if(event?.type==='command')command(event.name,event.payload||{}).catch(notice);
       else if(event?.type==='accounts-refresh'){updateAccounts().catch(()=>{});window.dispatchEvent(new Event('mix-sleep-timer-refresh'));}
+      else if(event?.type==='sleep-timer-expired'){
+        // The native host already stopped native audio; only ask the engine when it
+        // still believes playback is active, so a manually paused player is untouched.
+        if(shouldPause(engine.state.status))command('pause').catch(notice);
+        window.dispatchEvent(new Event('mix-sleep-timer-expired'));
+      }
       else if(event?.type==='video-panel-close')engine.closeVideo().catch(notice);
       else if(event?.type==='playlist-import-link')importShareLink(event.url).then(result=>notice(result.message)).catch(notice);
       else if(event?.type==='notice')notice(event.message);

@@ -53,15 +53,28 @@ final class SleepTimer {
         scheduler.schedule(delay, () -> fire(id));
     }
 
+    /**
+     * Resolves a deadline that has already passed. Used both by the delayed
+     * callback and by the lazy checks that run when the app is resumed, when
+     * playback starts or when the UI asks for the state: Handler uses
+     * uptimeMillis and is deferred while the device is suspended, while the
+     * deadline itself is based on elapsedRealtime and must not be extended.
+     */
+    synchronized boolean expireIfDue(boolean notify) {
+        if (!active || endsAt - clock.now() > 0) return false;
+        final int finished = minutes;
+        serial++;
+        scheduler.cancel();
+        clear();
+        if (notify) listener.onExpired(finished);
+        return true;
+    }
+
     private void fire(int id) {
         synchronized (this) {
             if (!active || id != serial) return;
-            final long remaining = endsAt - clock.now();
-            if (remaining > 0) { schedule(id); return; }
-            final int finished = minutes;
-            serial++;
-            clear();
-            listener.onExpired(finished);
+            if (expireIfDue(true)) return;
+            schedule(id);
         }
     }
 

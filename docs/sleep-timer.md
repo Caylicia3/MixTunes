@@ -23,6 +23,9 @@
 - Activity 重建不会创建第二个定时器，因为权威状态在进程级宿主中；WebView 界面重新加载后会通过原生桥查询剩余时间。
 - 到期时先调用 `AudioController.pauseAll()` 停止原生音频，再发送现有媒体会话同款 `pause` 命令：WebView 页面存活时会让播放引擎暂停 Bilibili 视频并同步状态，同时刷新前台服务通知。
 - 不新增权限、不新增常驻服务、不修改包名，复用现有 `PlaybackService` 与 `NativeBridge`。
+- 时间基准说明：截止时间用 `elapsedRealtime` 计算，而 `Handler.postDelayed` 使用 `uptimeMillis`，设备深度休眠期间回调会被推迟。音频加载时 `AudioController` 已调用 `MediaPlayer.setWakeMode(PARTIAL_WAKE_LOCK)`，实际播放期间设备保持唤醒，到期回调基本准时；暂停或无播放时回调即使延后，也没有内容需要暂停。为避免唤醒后留下陈旧定时器，`SleepTimer.expireIfDue()` 会在 Activity `onResume`、UI 查询状态以及开始新播放前用 `elapsedRealtime` 补结算：恢复时若仍在播放则立即暂停，开始新播放前只静默清除，不会立刻打断新播放。
+- 到期时先判断实际状态：原生只在 `AudioController.playing()` 为真时调用 `pauseAll()`；WebView 侧只在引擎状态为 `playing`/`buffering`/`loading` 时执行暂停。已经手动暂停时不会重复发送暂停，更不会恢复播放。
+- 未引入 AlarmManager、精确闹钟权限或额外 WakeLock：这些会改变后台行为或需要用户权限，且对睡眠定时器的耗电代价较高。只有在无播放、深度休眠场景也要求精确唤醒时才有必要，届时需要单独评估与授权。
 
 ## 到期暂停语义
 

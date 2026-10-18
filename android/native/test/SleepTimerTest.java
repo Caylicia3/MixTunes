@@ -148,6 +148,60 @@ final class SleepTimerTest {
             check(timer.remaining() == 0L, "clamped remaining");
         });
 
+        test("a callback delayed by suspend still uses the elapsed deadline", () -> {
+            FakeClock clock = new FakeClock();
+            FakeScheduler scheduler = new FakeScheduler();
+            Recorder recorder = new Recorder();
+            SleepTimer timer = new SleepTimer(clock, scheduler, recorder);
+            timer.start(30);
+            // Handler uses uptimeMillis and does not run while the device is suspended.
+            clock.advance(2 * 60 * 60000L);
+            scheduler.fire();
+            check(recorder.count == 1 && recorder.minutes == 30, "expired once after suspend");
+            check(!timer.active(), "cleared after suspend");
+        });
+
+        test("expireIfDue resolves a missed deadline exactly once", () -> {
+            FakeClock clock = new FakeClock();
+            FakeScheduler scheduler = new FakeScheduler();
+            Recorder recorder = new Recorder();
+            SleepTimer timer = new SleepTimer(clock, scheduler, recorder);
+            timer.start(15);
+            clock.advance(14 * 60000L);
+            check(!timer.expireIfDue(true), "not due yet");
+            check(timer.active(), "still active before the deadline");
+            clock.advance(60000L);
+            check(timer.expireIfDue(true), "due now");
+            check(recorder.count == 1, "notified once");
+            check(!timer.expireIfDue(true), "second check is a no-op");
+            check(recorder.count == 1, "never notified twice");
+        });
+
+        test("silent expiry clears without pausing new playback", () -> {
+            FakeClock clock = new FakeClock();
+            FakeScheduler scheduler = new FakeScheduler();
+            Recorder recorder = new Recorder();
+            SleepTimer timer = new SleepTimer(clock, scheduler, recorder);
+            timer.start(5);
+            clock.advance(6 * 60000L);
+            check(timer.expireIfDue(false), "cleared silently");
+            check(recorder.count == 0, "no pause requested for new playback");
+            check(!timer.active(), "inactive");
+        });
+
+        test("policy keeps paused audio untouched and never resumes", () -> {
+            check(!SleepTimerPolicy.shouldPauseAudio(false), "paused audio is not paused again");
+            check(SleepTimerPolicy.shouldPauseAudio(true), "playing audio is paused");
+            check(SleepTimerPolicy.shouldPauseEngine("playing"), "playing engine");
+            check(SleepTimerPolicy.shouldPauseEngine("buffering"), "buffering engine");
+            check(SleepTimerPolicy.shouldPauseEngine("loading"), "loading engine");
+            check(!SleepTimerPolicy.shouldPauseEngine("paused"), "paused engine untouched");
+            check(!SleepTimerPolicy.shouldPauseEngine("idle"), "idle engine untouched");
+            check(!SleepTimerPolicy.shouldPauseEngine(null), "unknown engine untouched");
+            check(SleepTimerPolicy.shouldNotifyWebView(true), "web view notified when alive");
+            check(!SleepTimerPolicy.shouldNotifyWebView(false), "no notification when dead");
+        });
+
         System.out.println("SleepTimer: " + passed + " tests PASS");
     }
 }

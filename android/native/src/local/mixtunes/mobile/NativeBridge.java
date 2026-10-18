@@ -73,7 +73,7 @@ final class NativeBridge {
             case "cookies": return cookies(data.getString("platform"));
             case "login": return MobileLogin.open(activity,data.getString("platform"));
             case "app-ready": activity.uiReady=true;activity.dispatchShareIntent();return true;
-            case "playback-start": PlaybackService.ensure(activity); return Json.object("started", true);
+            case "playback-start": SleepTimerHost.clearIfExpired(activity); PlaybackService.ensure(activity); return Json.object("started", true);
             case "audio-load": return audio.load(data);
             case "audio-activate": audio.activate(data); return true;
             case "audio-pause": if (data.has("token")) audio.pause(audio.required(data)); else audio.pauseAll(); return true;
