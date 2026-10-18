@@ -80,11 +80,15 @@ function normaliseLibrary(data) {
     muted: !!data?.muted };
 }
 class LibraryStore {
-  constructor(directory) { this.directory = directory; this.file = path.join(directory, 'library.json'); }
+  constructor(directory) { this.directory = directory; this.file = path.join(directory, 'library.json'); this.loadError = null; }
   load() {
     let data;
     try { data = JSON.parse(fs.readFileSync(this.file, 'utf8')); }
-    catch { return normaliseLibrary({}); }
+    catch (error) {
+      if (error.code === 'ENOENT' && !this.loadError) return normaliseLibrary({});
+      this.loadError = new Error('歌单读取失败，已保留原文件并禁止保存。请备份 library.json 后检查文件内容或访问权限。', { cause: error });
+      throw this.loadError;
+    }
     if (data?.schemaVersion !== 2 && !Array.isArray(data?.playlists)) {
       try { fs.copyFileSync(this.file, path.join(this.directory, 'library-v1-before-migration.json'), fs.constants.COPYFILE_EXCL); }
       catch (error) {
@@ -98,6 +102,7 @@ class LibraryStore {
     return normaliseLibrary(data);
   }
   save(data) {
+    if (this.loadError) throw this.loadError;
     fs.mkdirSync(this.directory, { recursive: true });
     const safe = normaliseLibrary(data);
     const temp = this.file + '.tmp';
