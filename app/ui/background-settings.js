@@ -5,22 +5,38 @@
     if (!api?.background || !policy) return null;
     legacy.closest('label').style.display = 'none';
     const panel = document.createElement('section'); panel.className = 'background-settings';
-    panel.innerHTML = '<label for="background-mode">背景模式</label><select id="background-mode"><option value="theme">默认主题背景</option><option value="current-cover">当前播放封面</option><option value="custom">自定义本地图片</option></select><div class="background-actions"><button type="button" id="background-pick">选择图片</button><button type="button" id="background-recrop">调整裁剪</button><button type="button" id="background-delete">删除自定义图片</button></div><label for="background-opacity">背景图片不透明度 <output id="background-opacity-value"></output></label><input id="background-opacity" type="range" min="0" max="100" step="1"><p class="background-hint">图片只保存在本机，不随歌单导出。支持 JPEG、PNG、静态 WebP，最大 12 MB / 2400 万像素。</p>';
+    panel.innerHTML = '<label for="background-mode">背景模式</label><select id="background-mode"><option value="theme">默认主题背景</option><option value="current-cover">当前播放封面</option><option value="custom">自定义本地图片</option></select><div class="background-actions"><button type="button" id="background-pick">选择图片</button><button type="button" id="background-recrop">调整裁剪</button><button type="button" id="background-delete">删除自定义图片</button></div><label for="background-opacity">背景图片不透明度 <output id="background-opacity-value"></output></label><input id="background-opacity" type="range" min="0" max="100" step="1"><label for="background-blur">背景模糊度 <output id="background-blur-value"></output></label><input id="background-blur" type="range" min="0" max="40" step="1"><p class="background-hint">图片只保存在本机，不随歌单导出。支持 JPEG、PNG、静态 WebP，最大 12 MB / 2400 万像素。</p>';
     status.before(panel);
     const dialog = document.createElement('dialog'); dialog.id = 'background-crop-dialog'; dialog.className = 'background-crop-dialog';
     dialog.setAttribute('aria-labelledby', 'background-crop-title');
     dialog.innerHTML = '<h2 id="background-crop-title">调整背景构图</h2><p>拖动图片调整位置；用滑块、鼠标滚轮或双指缩放。方向键也可移动图片。</p><div id="background-crop-stage" class="background-crop-stage" tabindex="0" role="group" aria-label="图片裁剪区域，方向键移动图片"><img draggable="false" alt="待裁剪的本地图片"><div class="background-crop-mask"></div></div><label for="background-zoom">缩放 <output id="background-zoom-value"></output></label><input id="background-zoom" type="range" min="1" max="4" step="0.01"><label class="background-effect-option"><input id="background-effect" type="checkbox">预览背景效果（含可读性遮罩）</label><p id="background-crop-status" role="status"></p><div class="background-crop-buttons"><button type="button" id="background-cancel">取消</button><button type="button" id="background-reset">重置裁剪</button><button type="button" id="background-confirm" class="primary">确认使用</button></div>';
     document.body.appendChild(dialog);
-    const $ = id => document.getElementById(id), mode = $('background-mode'), opacity = $('background-opacity');
+    const $ = id => document.getElementById(id), mode = $('background-mode'), opacity = $('background-opacity'), blur = $('background-blur');
     const stage = $('background-crop-stage'), image = stage.querySelector('img'), zoom = $('background-zoom');
     let saved = null, draft = null, busy = true, editing = false, saving = false, operation = 0;
     const pointers = new Map(); let pinch = null;
     const message = text => { status.textContent = text; };
+    let persistTimer = null;
+    function persistEffects() {
+      clearTimeout(persistTimer); persistTimer = null;
+      const opacitySaved = controller.setOpacity(opacity.value);
+      const blurSaved = controller.setBlur(blur.value);
+      if (opacitySaved === false || blurSaved === false) message('背景效果仅本次生效，当前环境无法保存设置。');
+    }
+    function schedulePersist() { clearTimeout(persistTimer); persistTimer = setTimeout(persistEffects, 250); }
     async function call(action, value) { const result = await api.background(action, value); if (result?.ok === false) throw Error(result.error || '背景操作失败'); return result; }
+    function paintRange(input) {
+      const min = Number(input.min) || 0, max = Number(input.max) || 100, value = Number(input.value) || 0;
+      const percent = max > min ? ((value - min) / (max - min)) * 100 : 0;
+      input.style.setProperty('--range-progress', percent.toFixed(2) + '%');
+    }
     function sync() {
       mode.value = controller.mode(); legacy.checked = controller.enabled();
       opacity.value = controller.opacity(); $('background-opacity-value').textContent = opacity.value + '%';
+      blur.value = controller.blur(); $('background-blur-value').textContent = blur.value + 'px';
+      paintRange(opacity); paintRange(blur);
       opacity.disabled = mode.value === 'theme';
+      blur.disabled = mode.value === 'theme';
       $('background-recrop').disabled = busy || !saved;
       $('background-delete').disabled = busy || !saved;
       $('background-pick').disabled = busy;
@@ -37,6 +53,10 @@
       zoom.value = draft.crop.zoom; $('background-zoom-value').textContent = Number(zoom.value).toFixed(2) + '×';
       stage.classList.toggle('preview-background-effect', $('background-effect').checked);
       stage.style.setProperty('--preview-opacity', String(controller.opacity() / 100));
+      const previewBlur = controller.blurFor('custom');
+      const previewSize = Math.min(stage.clientWidth, stage.clientHeight) || 1200;
+      stage.style.setProperty('--preview-blur', previewBlur + 'px');
+      stage.style.setProperty('--preview-blur-scale', String(Number((previewBlur > 0 ? Math.min(.25, (previewBlur * 2.5) / previewSize) : 0).toFixed(4))));
     }
     function close() {
       if (saving) return;
@@ -77,7 +97,9 @@
       } finally { bitmap.close(); }
     }
     mode.addEventListener('change', () => { const persisted = controller.setMode(mode.value); sync(); message(persisted === false ? '背景模式仅本次生效，当前环境无法保存设置。' : mode.value === 'custom' && !saved ? '尚未选择图片，请选择本地背景。' : '背景模式已保存。'); });
-    opacity.addEventListener('input', () => { controller.setOpacity(opacity.value); $('background-opacity-value').textContent = opacity.value + '%'; });
+    opacity.addEventListener('input', () => { controller.setOpacity(opacity.value, { persist: false }); $('background-opacity-value').textContent = opacity.value + '%'; paintRange(opacity); schedulePersist(); });
+    blur.addEventListener('input', () => { controller.setBlur(blur.value, { persist: false }); $('background-blur-value').textContent = blur.value + 'px'; paintRange(blur); schedulePersist(); });
+    for (const input of [opacity, blur]) { input.addEventListener('change', persistEffects); input.addEventListener('blur', persistEffects); }
     legacy.addEventListener('change', sync);
     $('background-pick').addEventListener('click', async () => {
       if (busy) return; busy = true; sync(); const request = ++operation;

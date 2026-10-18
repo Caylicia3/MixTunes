@@ -2,6 +2,11 @@
 
 ((root) => {
   const STORAGE_KEY = 'mixtunes-background-mode';
+  const OPACITY_KEY = 'mixtunes-background-opacity';
+  const BLUR_KEYS = { cover: 'mixtunes-background-blur-cover', custom: 'mixtunes-background-blur-custom' };
+  const BLUR_MAX = 40;
+  const LEGACY_COVER_BLUR = 24;
+  const LEGACY_SMALL_COVER_BLUR = 18;
   const playableStates = new Set(['loading', 'buffering', 'playing', 'paused', 'ended']);
 
   function sourceFor(state, allowDataImages = false) {
@@ -20,20 +25,70 @@
     return '';
   }
 
+  function clampBlur(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    return Math.max(0, Math.min(BLUR_MAX, Math.round(number)));
+  }
+
   function create({ container, documentRoot = root.document.documentElement, storage,
     makeImage = () => new root.Image(), allowDataImages = false, onStorageError = () => {},
-    schedule = root.setTimeout.bind(root), cancel = root.clearTimeout.bind(root) }) {
+    schedule = root.setTimeout.bind(root), cancel = root.clearTimeout.bind(root),
+    matchMedia = root.matchMedia }) {
     let enabled = false, mode = 'theme', custom = null, opacity = 100, latest = {}, source = '', serial = 0, pending = null, timer = null;
+    // null means "the user never changed this mode": the legacy default stays in
+    // effect. Blur is remembered per image mode so one mode cannot overwrite the other.
+    let coverBlur = null, customBlur = null;
     const removalTimers = new Map();
+    function readBlur(key) {
+      try {
+        const raw = storage?.getItem(key);
+        if (raw === null || raw === undefined || raw === '') return null;
+        const number = Number(raw);
+        if (!Number.isFinite(number) || number < 0 || number > BLUR_MAX) return null;
+        return clampBlur(number);
+      } catch { return null; }
+    }
     try {
       if (storage === undefined) storage = root.localStorage;
       mode = storage?.getItem(STORAGE_KEY);
       if (!['theme', 'current-cover', 'custom'].includes(mode)) mode = 'theme';
       enabled = mode === 'current-cover';
-      const savedOpacity = storage?.getItem('mixtunes-background-opacity');
+      const savedOpacity = storage?.getItem(OPACITY_KEY);
       if (savedOpacity !== null && savedOpacity !== undefined && savedOpacity !== '' && Number.isFinite(Number(savedOpacity))) opacity = Math.max(0, Math.min(100, Number(savedOpacity)));
+      coverBlur = readBlur(BLUR_KEYS.cover);
+      customBlur = readBlur(BLUR_KEYS.custom);
     } catch { onStorageError(); }
-    container.style?.setProperty('--background-opacity', String(opacity / 100));
+
+    function legacyCoverBlur() {
+      try { return matchMedia?.('(max-width: 600px)')?.matches ? LEGACY_SMALL_COVER_BLUR : LEGACY_COVER_BLUR; } catch { return LEGACY_COVER_BLUR; }
+    }
+    function blurFor(target) {
+      if (target === 'custom') return customBlur === null ? 0 : customBlur;
+      return coverBlur === null ? legacyCoverBlur() : coverBlur;
+    }
+    function blur() {
+      if (mode === 'custom') return blurFor('custom');
+      if (mode === 'current-cover') return blurFor('cover');
+      return 0;
+    }
+    function applyEffects() {
+      const value = blur();
+      const explicit = mode === 'custom' ? customBlur !== null : coverBlur !== null;
+      let scale = 0;
+      if (explicit && value > 0) {
+        let size = 0;
+        try { const box = container.getBoundingClientRect?.(); size = Math.min(Number(box?.width) || 0, Number(box?.height) || 0); } catch {}
+        // Extra scale hides the transparent fringe CSS blur creates at the viewport edge.
+        // Legacy defaults keep their original framing because they are not "explicit".
+        scale = Math.min(.25, (value * 2.5) / (size || 1200));
+      }
+      container.style?.setProperty?.('--background-blur', value + 'px');
+      container.style?.setProperty?.('--background-blur-scale', String(Number(scale.toFixed(4))));
+    }
+    container.style?.setProperty?.('--background-opacity', String(opacity / 100));
+    applyEffects();
+
     function layoutCustom() {
       if (mode !== 'custom' || !custom || !root.mixTunesBackgroundImage) return;
       const box = container.getBoundingClientRect();
@@ -43,7 +98,7 @@
         for (const name of ['left', 'top', 'width', 'height']) image.style[name] = rect[name] + 'px';
       }
     }
-    const observer = typeof root.ResizeObserver === 'function' ? new root.ResizeObserver(layoutCustom) : null;
+    const observer = typeof root.ResizeObserver === 'function' ? new root.ResizeObserver(() => { layoutCustom(); applyEffects(); }) : null;
     observer?.observe(container);
 
     function clearPending() {
@@ -103,6 +158,8 @@
       enabled: () => enabled,
       mode: () => mode,
       opacity: () => opacity,
+      blur,
+      blurFor,
       custom: () => custom,
       setMode(value) {
         const nextMode = ['theme', 'current-cover', 'custom'].includes(value) ? value : 'theme';
@@ -113,16 +170,26 @@
         try { if (!storage) throw Error('Settings unavailable'); storage.setItem(STORAGE_KEY, mode); } catch { saved = false; onStorageError(); }
         // A mode switch can reuse the same pixels, but must reset their layout.
         if (changed) { source = ''; reset(); }
+        applyEffects();
         update(latest);
         return saved;
       },
       setCustom(value) { custom = value; if (mode === 'custom') { update(latest); layoutCustom(); } },
-      setOpacity(value) {
+      setOpacity(value, { persist = true } = {}) {
         opacity = Math.max(0, Math.min(100, Number(value) || 0));
-        container.style?.setProperty('--background-opacity', String(opacity / 100));
+        container.style?.setProperty?.('--background-opacity', String(opacity / 100));
         if (!opacity) documentRoot.classList.remove('has-cover-background');
         else if (container.children.length) documentRoot.classList.add('has-cover-background');
-        try { if (!storage) throw Error('Settings unavailable'); storage.setItem('mixtunes-background-opacity', String(opacity)); return true; } catch { onStorageError(); return false; }
+        if (!persist) return true;
+        try { if (!storage) throw Error('Settings unavailable'); storage.setItem(OPACITY_KEY, String(opacity)); return true; } catch { onStorageError(); return false; }
+      },
+      setBlur(value, { persist = true } = {}) {
+        const next = clampBlur(value);
+        if (mode === 'custom') customBlur = next; else coverBlur = next;
+        applyEffects();
+        if (!persist) return true;
+        const key = mode === 'custom' ? BLUR_KEYS.custom : BLUR_KEYS.cover;
+        try { if (!storage) throw Error('Settings unavailable'); storage.setItem(key, String(next)); return true; } catch { onStorageError(); return false; }
       },
       setEnabled(value) {
         enabled = Boolean(value);
@@ -131,13 +198,14 @@
           if (!storage) throw new Error('Settings storage unavailable');
           storage.setItem(STORAGE_KEY, enabled ? 'current-cover' : 'theme');
         } catch { onStorageError(); }
+        applyEffects();
         update(latest);
       },
       destroy() { source = ''; reset(); observer?.disconnect(); },
     };
   }
 
-  const api = { STORAGE_KEY, sourceFor, create };
+  const api = { STORAGE_KEY, OPACITY_KEY, BLUR_KEYS, BLUR_MAX, sourceFor, create };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.mixTunesCoverBackground = api;
 })(globalThis);
