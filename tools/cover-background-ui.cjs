@@ -212,7 +212,7 @@ test('current playback cover background stays local and independent of transport
     await settings(page, true); await page.locator('#background-mode').selectOption('current-cover'); await ready(page, 'white.svg');
     const after = await page.evaluate(() => window.playerAPI.getState());
     assert.deepEqual(after, before);
-    assert.ok((await page.evaluate(() => nativeCalls)).every(call => call.method === 'theme'));
+    assert.ok((await page.evaluate(() => nativeCalls)).every(call => call.method === 'theme' || call.method.startsWith('sleep-timer-')));
     await page.evaluate(() => window.playerAPI.exportLibrary());
     const exported = await page.evaluate(() => window.exportedLibrary);
     assert.ok(exported && !exported.includes('mixtunes-background-mode') && !exported.includes('current-cover'));

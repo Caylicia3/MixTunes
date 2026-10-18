@@ -160,6 +160,7 @@
   async function invoke(fn){try{await ready;return await fn();}catch(error){return{ok:false,error:errorMessage(error)};}}
   window.playerAPI={
     background:(action,payload={})=>native(action==='pick'?'background-pick':action==='editor'?'background-editor':'storage-background-'+action,payload,{timeoutMs:action==='pick'?600000:30000}),
+    sleepTimer:(action,payload={})=>native('sleep-timer-'+action,payload),
     getState:async()=>{await ready;return engine.snapshot();},
     command:(name,payload={})=>invoke(()=>command(name,payload)),
     importLinks:text=>invoke(()=>importLinks(text)),
@@ -179,7 +180,7 @@
     ready.then(()=>{
       if(['audio','video','web'].includes(event?.type)&&event.event)engine.onEvent({...event.event,backend:event.type});
       else if(event?.type==='command')command(event.name,event.payload||{}).catch(notice);
-      else if(event?.type==='accounts-refresh')updateAccounts().catch(()=>{});
+      else if(event?.type==='accounts-refresh'){updateAccounts().catch(()=>{});window.dispatchEvent(new Event('mix-sleep-timer-refresh'));}
       else if(event?.type==='video-panel-close')engine.closeVideo().catch(notice);
       else if(event?.type==='playlist-import-link')importShareLink(event.url).then(result=>notice(result.message)).catch(notice);
       else if(event?.type==='notice')notice(event.message);

@@ -90,6 +90,8 @@ Android 播放栏提供“定位正在播放”：返回实际来源歌单、清
 
 背景设置现支持默认主题、当前封面和自定义本地图片，可拖动/缩放裁剪，并共用 0～100% 图片不透明度。图片只保存在本机，不随歌单导出；使用方法、尺寸限制和设备验收见 [自定义背景与裁剪](docs/custom-background.md)。
 
+Windows 的“播放器设置”和 Android 的“设置 → 睡眠定时器”支持 15／30／60 分钟预设与 1～240 分钟自定义时长；到点只暂停当前播放，保留当前歌曲、进度和队列，Windows 隐藏到托盘后仍然有效。实现、测试与人工验收范围见 [睡眠定时器](docs/sleep-timer.md)。
+
 Windows 和 Android 统一使用原创「折带播放」图标。可编辑源文件为 `app/assets/icon-source.svg`；修改后在 `app` 目录运行 `npm run icons:generate`，统一生成 Windows ICO、托盘 PNG 和 Android 启动/自适应资源。生成需要已安装的项目开发依赖与 Microsoft Edge，普通打包使用仓库中的现成资源。详细约定与检查命令见 [应用图标维护](docs/app-icons.md)。
 
 ## 许可
