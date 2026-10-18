@@ -25,9 +25,10 @@ test('Android locate UI and bundled runtime in isolated mobile browser', async t
       const url = new URL(route.request().url());
       if (url.origin !== 'http://mixtunes.test') return route.abort();
       const file = url.pathname.slice(1) || 'index.html';
-      if (!['index.html', 'styles.css', 'ui.js', 'runtime.js'].includes(file)) return route.abort();
+      if (!['index.html', 'styles.css', 'cover-background.css', 'ui.js', 'runtime.js'].includes(file)) return route.abort();
       const source = file === 'runtime.js' && !realRuntime ? path.join(__dirname, '../app/ui/locate-playing.js') : path.join(__dirname, 'web', file);
-      return route.fulfill({ body: fs.readFileSync(source), contentType: file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css' : 'application/javascript' });
+      const body = fs.readFileSync(source) + (file === 'runtime.js' && !realRuntime ? '\n' + fs.readFileSync(path.join(__dirname, '../app/ui/cover-background.js')) : '');
+      return route.fulfill({ body, contentType: file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css' : 'application/javascript' });
     });
     await page.addInitScript(({ snapshot, real }) => {
       window.fixtureState = snapshot; window.calls = []; window.nativeCalls = [];

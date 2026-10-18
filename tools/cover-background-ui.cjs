@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('../app/node_modules/playwright-core');
-const clients = [false];
+const clients = process.env.MIXTUNES_COVER_CLIENT === 'windows' ? [false] : [false, true];
 
 test('current playback cover background stays local and independent of transport', async t => {
   const browser = await chromium.launch({ channel: process.env.MIXTUNES_TEST_BROWSER || 'msedge', headless: true });
@@ -15,7 +15,7 @@ test('current playback cover background stays local and independent of transport
     queue: ['qq:one'], activePlaylistId: 'source', currentKey: 'qq:one', playbackPlaylistId: 'source', playbackQueue: ['qq:one'],
     status: 'playing', positionMs: 42000, durationMs: 180000, volume: .7, muted: false, generation: 7 };
   seed.currentTrack = seed.tracks[0];
-  async function fixture(mobile) {
+  async function fixture(mobile, realRuntime = false) {
     const page = await browser.newPage({ viewport: mobile ? { width: 375, height: 812 } : { width: 1240, height: 840 }, isMobile: mobile, hasTouch: mobile });
     t.after(() => page.close());
     const errors = [], requests = [], delayed = new Map();
@@ -36,12 +36,34 @@ test('current playback cover background stays local and independent of transport
       const file = url.pathname.slice(1) || 'index.html';
       if (!['index.html', 'theme.js', 'styles.css', 'cover-background.css', 'cover-background.js', 'locate-playing.js', 'runtime.js', 'app.js', 'ui.js'].includes(file)) return route.abort();
       let body;
-      if (mobile && file === 'runtime.js') body = fs.readFileSync(path.join(__dirname, '../app/ui/locate-playing.js')) + '\n' + fs.readFileSync(path.join(__dirname, '../app/ui/cover-background.js'));
+      if (mobile && file === 'runtime.js' && !realRuntime) body = fs.readFileSync(path.join(__dirname, '../app/ui/locate-playing.js')) + '\n' + fs.readFileSync(path.join(__dirname, '../app/ui/cover-background.js'));
       else body = fs.readFileSync(path.join(__dirname, '..', mobile ? 'android/web' : 'app/ui', file));
       return route.fulfill({ body, contentType: file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css' : 'application/javascript' });
     });
-    await page.addInitScript(snapshot => {
+    await page.addInitScript(({ snapshot, realRuntime }) => {
       window.stateFixture = snapshot; window.calls = [];
+      window.nativeCalls = [];
+      if (realRuntime) {
+        let counter = 0;
+        window.MixTunesBridge = {
+          crypto: text => {
+            const p = JSON.parse(text);
+            if (p.op !== 'randomUUID') throw Error('Unexpected crypto operation');
+            return JSON.stringify({ ok: true, value: 'background-fixture-' + (++counter) });
+          },
+          postMessage: text => {
+            const p = JSON.parse(text); window.nativeCalls.push(p); let value = true, error;
+            if (p.method === 'storage-load') value = { json: JSON.stringify({ ...snapshot, schemaVersion: 2,
+              playlists: snapshot.playlists.map(playlist => ({ ...playlist, mode: 'sequential', currentKey: playlist.queue.includes(snapshot.currentKey) ? snapshot.currentKey : null })),
+              tracks: snapshot.tracks.map((track, i) => ({ ...track, sourceId: String(i + 1), url: track.platform === 'qq' ? 'https://y.qq.com/n/ryqq/songDetail/' + (i + 1) : 'https://music.163.com/song?id=' + (i + 1) })) }) };
+            else if (p.method === 'cookies') value = [];
+            else if (p.method === 'export') { window.exportedLibrary = p.payload.json; value = { saved: true }; }
+            else if (!['storage-save', 'theme', 'app-ready', 'cancel'].includes(p.method)) error = 'Unexpected native operation: ' + p.method;
+            queueMicrotask(() => window.__mixNativeReply({ id: p.id, ok: !error, value, error }));
+          }
+        };
+        return;
+      }
       window.sendState = patch => { Object.assign(window.stateFixture, patch); window.listener(structuredClone(window.stateFixture)); };
       window.playerAPI = {
         getState: async () => structuredClone(snapshot), onState: fn => { window.listener = fn; }, onNotice: () => {},
@@ -53,7 +75,7 @@ test('current playback cover background stays local and independent of transport
         search: async ({ platform }) => ({ ok: true, requestId: 'fixture', results: [{ platform, ok: true, items: [{ id: 'result', platform, title: '搜索结果封面', coverUrl: 'https://covers.test/black.svg' }] }] }),
         lyrics: async () => ({ lines: [] })
       };
-    }, seed);
+    }, { snapshot: seed, realRuntime });
     await page.goto('http://mixtunes.test/');
     await page.waitForFunction(mobile ? () => window.mobileUI && !document.getElementById('locate-playing').disabled : () => document.getElementById('connection-status').textContent === '已就绪');
     return { page, requests, delayed };
@@ -88,6 +110,7 @@ test('current playback cover background stays local and independent of transport
       await ready(page, 'black.svg');
       await settings(page, mobile); await page.locator('#cover-background-enabled').uncheck();
       assert.equal(await page.locator('#cover-background img').count(), 0);
+      assert.equal(await page.locator('#cover-background').evaluate(layer => getComputedStyle(layer).visibility), 'hidden');
       await page.reload(); assert.equal(await page.locator('#cover-background img').count(), 0);
     });
 
@@ -155,7 +178,7 @@ test('current playback cover background stays local and independent of transport
       assert.equal(await page.locator('#cover-background img').last().evaluate(img => getComputedStyle(img).transitionDuration), '0s');
       assert.equal(await page.locator('.app').evaluate(app => getComputedStyle(app).filter), 'none');
       assert.equal(await page.locator('#cover-background').evaluate(layer => getComputedStyle(layer).pointerEvents), 'none');
-      for (const size of mobile ? [{ width: 320, height: 640 }, { width: 812, height: 375 }] : [{ width: 960, height: 680 }]) {
+      for (const size of mobile ? [{ width: 320, height: 640 }, { width: 812, height: 375 }, { width: 768, height: 1024 }] : [{ width: 960, height: 680 }]) {
         await page.setViewportSize(size); await settings(page, mobile);
         const checkbox = page.locator('#cover-background-enabled');
         await checkbox.uncheck(); await checkbox.check();
@@ -165,6 +188,29 @@ test('current playback cover background stays local and independent of transport
         await shot(page, client + '-' + size.width + '-settings');
         if (!mobile) await page.locator('#close-quality-settings').click();
       }
+      if (mobile) {
+        await page.setViewportSize({ width: 320, height: 640 });
+        await page.evaluate(() => { document.documentElement.style.fontSize = '28px'; });
+        const label = page.locator('label.cover-background-setting');
+        await label.scrollIntoViewIfNeeded();
+        const bounds = await label.evaluate(node => ({ rect: node.getBoundingClientRect().toJSON(), size: parseFloat(getComputedStyle(node).fontSize) }));
+        assert.ok(bounds.size >= 25 && bounds.rect.left >= 0 && bounds.rect.right <= 320 && bounds.rect.height >= 48);
+        await page.locator('#cover-background-enabled').uncheck();
+        await shot(page, client + '-large-text-settings');
+      }
     });
   }
+  if (clients.includes(true)) await t.test('android: real bundled runtime keeps background settings out of native library exports', async () => {
+    const { page } = await fixture(true, true);
+    await page.evaluate(() => window.playerAPI.command('playlist-select', { id: 'other' }));
+    const before = await page.evaluate(async () => { window.nativeCalls = []; return window.playerAPI.getState(); });
+    await settings(page, true); await page.locator('#cover-background-enabled').check(); await ready(page, 'white.svg');
+    const after = await page.evaluate(() => window.playerAPI.getState());
+    assert.deepEqual(after, before);
+    assert.ok((await page.evaluate(() => nativeCalls)).every(call => call.method === 'theme'));
+    await page.evaluate(() => window.playerAPI.exportLibrary());
+    const exported = await page.evaluate(() => window.exportedLibrary);
+    assert.ok(exported && !exported.includes('mixtunes-background-mode') && !exported.includes('current-cover'));
+    assert.equal(await page.locator('#cover-background-enabled').isChecked(), true);
+  });
 });
