@@ -5,9 +5,10 @@ const { STORAGE_KEY, sourceFor, create } = require('../ui/cover-background.js');
 const snapshot = (coverUrl = 'https://covers.test/a.png', patch = {}) => ({ currentKey: 'playing', status: 'playing',
   currentTrack: { key: 'playing', platform: 'netease', coverUrl }, tracks: [], ...patch });
 
-function fixture(initial = null, brokenStorage = false) {
+function fixture(initial = null, brokenStorage = false, storedOpacity = null) {
   const values = new Map(initial ? [[STORAGE_KEY, initial]] : []), images = [], jobs = new Map(), flags = new Set();
   const container = { children: [], appendChild(image) { this.children.push(image); image.parent = this; } };
+  if (storedOpacity !== null) values.set('mixtunes-background-opacity', storedOpacity);
   const controller = create({ container, documentRoot: { classList: { add: flag => flags.add(flag), remove: flag => flags.delete(flag) } },
     storage: { getItem: key => values.get(key), setItem(key, value) { if (brokenStorage) throw Error('denied'); values.set(key, value); } },
     makeImage() {
@@ -86,4 +87,35 @@ test('cached rapid changes keep at most two image nodes and release them on dest
     assert.ok(f.container.children.length <= 2);
   }
   f.controller.destroy(); assert.equal(f.container.children.length, 0); assert.equal(f.jobs.size, 0);
+});
+
+test('custom backgrounds ignore playback and opacity changes never replace decoded pixels',()=>{
+  const f=fixture('current-cover');f.controller.update(snapshot());f.images[0].onload();
+  f.controller.setCustom({version:1,image:'data:image/jpeg;base64,AAAA',crop:{x:.5,y:.5,zoom:2}});
+  f.controller.setMode('custom');f.images.at(-1).onload();const image=f.container.children[0],count=f.images.length;
+  f.controller.update(snapshot('https://covers.test/new.png',{status:'paused',currentKey:'another'}));
+  for(const opacity of [0,50,100])f.controller.setOpacity(opacity);
+  assert.equal(f.images.length,count);assert.equal(f.container.children[0],image);
+  assert.equal(f.values.get('mixtunes-background-opacity'),'100');assert.equal(f.controller.mode(),'custom');
+  f.controller.setMode('theme');assert.equal(f.container.children.length,0);assert.ok(f.controller.custom());
+  f.controller.setMode('custom');assert.ok(f.images.at(-1).src.startsWith('data:image/jpeg'));
+});
+
+test('a custom decode failure cannot replace a later mode and falls back to theme on its own failure',()=>{
+  const f=fixture('custom');f.controller.setCustom({image:'data:image/jpeg;base64,AAAA'});const late=f.images[0].onerror;
+  f.controller.setMode('current-cover');f.controller.update(snapshot());late();assert.equal(f.controller.mode(),'current-cover');
+  f.controller.setMode('custom');f.images.at(-1).onerror();assert.equal(f.controller.mode(),'theme');
+});
+
+test('old cover mode retains 100% defaults; all providers share persisted opacity without fetching again',()=>{
+  assert.equal(fixture('current-cover').controller.opacity(),100);
+  assert.equal(fixture('current-cover',false,'45').controller.opacity(),45);
+  assert.equal(fixture('current-cover',false,'invalid').controller.opacity(),100);
+  for(const platform of ['qq','netease','bilibili']){
+    const f=fixture('current-cover'),state=snapshot();state.currentTrack.platform=platform;
+    f.controller.update(state);f.images[0].onload();
+    for(const opacity of [0,50,100])f.controller.setOpacity(opacity);
+    assert.equal(f.images.length,1);assert.equal(f.values.get('mixtunes-background-opacity'),'100');
+    assert.equal(f.controller.mode(),'current-cover');assert.equal(state.currentTrack.platform,platform);
+  }
 });
