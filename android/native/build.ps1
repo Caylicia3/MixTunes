@@ -3,7 +3,7 @@ param(
   [string]$AssetsDirectory = (Join-Path $PSScriptRoot '..\web'),
   [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\build'),
   [string]$VersionName = '1.1.0',
-  [int]$VersionCode = 13,
+  [int]$VersionCode = 14,
   [switch]$RequireExistingKey
 )
 $ErrorActionPreference = 'Stop'

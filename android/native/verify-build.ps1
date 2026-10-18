@@ -5,7 +5,7 @@ param(
   [string]$DeliverablePath = '',
   [string]$SdkDirectory = (Join-Path $PSScriptRoot '..\sdk'),
   [string]$ExpectedVersion = '1.1.0',
-  [int]$ExpectedVersionCode = 13,
+  [int]$ExpectedVersionCode = 14,
   [string]$ExpectedCertificateSha256 = '',
   [string]$RuntimeReportPath = ''
 )

@@ -1,8 +1,8 @@
 /* Decorative images only: the application and dialogs never receive a blur filter. */
 .cover-background { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; visibility: hidden; opacity: 0; transition: opacity .22s ease; }
 .cover-background > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; filter: blur(var(--background-blur, 24px)) opacity(var(--background-opacity, 1)); transform: scale(calc(1.12 + var(--background-blur-scale, 0))); opacity: 0; transition: opacity .22s ease; }
-.cover-background::after { content: ''; position: absolute; inset: 0; background: rgba(255, 255, 255, .88); }
-:root[data-theme="dark"] .cover-background::after { background: rgba(32, 33, 35, .90); }
+.cover-background::after { content: ''; position: absolute; inset: 0; background: rgba(255, 255, 255, var(--background-mask-light, .88)); }
+:root[data-theme="dark"] .cover-background::after { background: rgba(32, 33, 35, var(--background-mask-dark, .90)); }
 .has-cover-background .cover-background { visibility: visible; opacity: 1; }
 .has-cover-background .app { position: relative; z-index: 1; }
 :root.has-cover-background:not([data-theme="dark"]) { --muted: #565861; --subtle: #62646b; --placeholder: #62646b; }
@@ -53,8 +53,8 @@ label.cover-background-setting { display: flex; align-items: center; justify-con
 .background-crop-stage img { position: absolute; max-width: none; user-select: none; pointer-events: none; }
 .background-crop-mask { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 1px #ffffff66; }
 .preview-background-effect img { opacity: var(--preview-opacity, 1); filter: blur(var(--preview-blur, 0px)); transform: scale(calc(1 + var(--preview-blur-scale, 0))); }
-.preview-background-effect .background-crop-mask { background: rgba(255,255,255,.88); }
-:root[data-theme="dark"] .preview-background-effect .background-crop-mask { background: rgba(32,33,35,.90); }
+.preview-background-effect .background-crop-mask { background: rgba(255,255,255,var(--background-mask-light, .88)); }
+:root[data-theme="dark"] .preview-background-effect .background-crop-mask { background: rgba(32,33,35,var(--background-mask-dark, .90)); }
 .background-effect-option { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .background-crop-buttons { position: sticky; bottom: -20px; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0 max(12px,env(safe-area-inset-bottom)); background: var(--surface, #fff); }
 .background-crop-buttons button { min-height: 44px; }

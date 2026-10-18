@@ -4,6 +4,8 @@
   const STORAGE_KEY = 'mixtunes-background-mode';
   const OPACITY_KEY = 'mixtunes-background-opacity';
   const BLUR_KEYS = { cover: 'mixtunes-background-blur-cover', custom: 'mixtunes-background-blur-custom' };
+  const MASK_KEYS = { light: 'mixtunes-background-mask-light', dark: 'mixtunes-background-mask-dark' };
+  const MASK_DEFAULTS = { light: 88, dark: 90 };
   const BLUR_MAX = 40;
   const LEGACY_COVER_BLUR = 24;
   const LEGACY_SMALL_COVER_BLUR = 18;
@@ -39,6 +41,7 @@
     // null means "the user never changed this mode": the legacy default stays in
     // effect. Blur is remembered per image mode so one mode cannot overwrite the other.
     let coverBlur = null, customBlur = null;
+    const masks = { ...MASK_DEFAULTS };
     const removalTimers = new Map();
     function readBlur(key) {
       try {
@@ -58,7 +61,17 @@
       if (savedOpacity !== null && savedOpacity !== undefined && savedOpacity !== '' && Number.isFinite(Number(savedOpacity))) opacity = Math.max(0, Math.min(100, Number(savedOpacity)));
       coverBlur = readBlur(BLUR_KEYS.cover);
       customBlur = readBlur(BLUR_KEYS.custom);
+      for (const theme of ['light', 'dark']) {
+        const value = storage?.getItem(MASK_KEYS[theme]);
+        if (value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 100) masks[theme] = Math.round(Number(value));
+      }
     } catch { onStorageError(); }
+
+    function theme() { return documentRoot.getAttribute?.('data-theme') === 'dark' ? 'dark' : 'light'; }
+    function applyMask() {
+      for (const name of ['light', 'dark']) documentRoot.style?.setProperty?.('--background-mask-' + name, String(masks[name] / 100));
+    }
+    applyMask();
 
     function legacyCoverBlur() {
       try { return matchMedia?.('(max-width: 600px)')?.matches ? LEGACY_SMALL_COVER_BLUR : LEGACY_COVER_BLUR; } catch { return LEGACY_COVER_BLUR; }
@@ -160,6 +173,13 @@
       opacity: () => opacity,
       blur,
       blurFor,
+      mask: () => masks[theme()],
+      setMask(value) {
+        const name = theme();
+        masks[name] = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+        applyMask();
+        try { if (!storage) throw Error('Settings unavailable'); storage.setItem(MASK_KEYS[name], String(masks[name])); return true; } catch { onStorageError(); return false; }
+      },
       custom: () => custom,
       setMode(value) {
         const nextMode = ['theme', 'current-cover', 'custom'].includes(value) ? value : 'theme';
@@ -205,7 +225,7 @@
     };
   }
 
-  const api = { STORAGE_KEY, OPACITY_KEY, BLUR_KEYS, BLUR_MAX, sourceFor, create };
+  const api = { STORAGE_KEY, OPACITY_KEY, BLUR_KEYS, BLUR_MAX, MASK_KEYS, MASK_DEFAULTS, sourceFor, create };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.mixTunesCoverBackground = api;
 })(globalThis);

@@ -75,7 +75,7 @@ node android/build-web.cjs
 & .\android\native\test-request-control.ps1
 & .\android\native\test-qq-mobile-login.ps1
 node --test android/native/test-video-bootstrap.cjs android/native/test-qq-mobile-choice.cjs
-& .\android\native\build.ps1 -SdkDirectory $env:ANDROID_HOME -VersionName '1.1.0' -VersionCode 13 -RequireExistingKey
+& .\android\native\build.ps1 -SdkDirectory $env:ANDROID_HOME -VersionName '1.1.0' -VersionCode 14 -RequireExistingKey
 ```
 
 Android 输出位于 `android/build/`；脚本会校验 APK 对齐、签名和安装信息。当前构建使用本地 debug 签名。首次构建会在 `android/signing/` 创建密钥，后续构建复用它。不要提交该目录；Fork APK 沿用已有本地签名（证书 SHA-256：`521aecc240daa9ce9f5a526a46bf6a82de72b6b1e03122a1944c1990da25a7ae`），可覆盖同签名旧测试版；不能直接覆盖上游签名不同的 APK。禁止为了升级而自动卸载或清数据。首次自行构建且没有密钥时，只能显式去掉 `-RequireExistingKey` 创建自己的开发密钥，这样生成的包不能覆盖 Fork 发布包。
@@ -88,7 +88,7 @@ Android 播放栏提供“定位正在播放”：返回实际来源歌单、清
 
 当前封面背景默认关闭，可在 Windows“设置”或 Android“设置 → 外观”中开启。它跟随实际播放内容，暂停保留，封面不可用时回到原主题；设置只保存在本机，不随歌单导出。实现、测试与人工验收见 [当前播放封面背景](docs/current-cover-background.md)。
 
-背景设置现支持默认主题、当前封面和自定义本地图片，可拖动/缩放裁剪，共用 0～100% 图片不透明度，并可调节 0～40px 背景模糊度；两个滑块拖动时实时预览。图片只保存在本机，不随歌单导出；使用方法、尺寸限制和设备验收见 [自定义背景与裁剪](docs/custom-background.md)。
+背景设置现支持默认主题、当前封面和自定义本地图片，可拖动/缩放裁剪，共用 0～100% 图片不透明度，并可调节 0～40px 背景模糊度；滑块拖动时实时预览。另有独立的 0～100%「背景遮罩强度」，浅／深色主题分别记忆，默认 88%／90% 保持旧效果；调低遮罩可能降低文字可读性。图片只保存在本机，不随歌单导出；使用方法、尺寸限制和设备验收见 [自定义背景与裁剪](docs/custom-background.md)。
 
 Windows 的“播放器设置”和 Android 的“设置 → 睡眠定时器”支持 15／30／60 分钟预设与 1～240 分钟自定义时长；到点只暂停当前播放，保留当前歌曲、进度和队列，Windows 隐藏到托盘后仍然有效。实现、测试与人工验收范围见 [睡眠定时器](docs/sleep-timer.md)。
 

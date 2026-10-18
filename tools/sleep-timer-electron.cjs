@@ -28,6 +28,14 @@ test('packaged Windows sleep timer expires while hidden in the tray', { skip: pr
   t.after(() => app.close().catch(() => {}));
   const page = await app.firstWindow();
   await page.waitForFunction(() => document.getElementById('connection-status').textContent === '已就绪');
+  // The UI can answer IPC before loadFile resolves and setupTray completes.
+  // Wait for the existing application-ready signal before testing hide-on-close.
+  const readyLog = path.join(dataDir, 'playback-events.jsonl');
+  const ready = () => fs.existsSync(readyLog) && fs.readFileSync(readyLog, 'utf8').includes('"type":"app-ready"');
+  for (let attempt = 0; !ready() && attempt < 100; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert.equal(ready(), true, 'application startup and tray initialization completed');
 
   const windowId = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.getTitle() === 'MixTunes').id);
   const visible = () => app.evaluate(({ BrowserWindow }, id) => BrowserWindow.fromId(id).isVisible(), windowId);

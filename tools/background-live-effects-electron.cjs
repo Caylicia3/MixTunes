@@ -46,9 +46,18 @@ test('packaged Windows keeps live blur and opacity across tray hiding and restar
   assert.equal(await first.page.evaluate(() => document.querySelectorAll('#sleep-timer-status').length), 1, 'task F panel still present');
   await setRange(first.page, 'background-blur', 40, 'change');
   await setRange(first.page, 'background-opacity', 35, 'change');
+  await setRange(first.page, 'background-mask', 0, 'input');
+  await first.page.evaluate(() => mixlinkTheme.set('dark'));
+  await first.page.waitForFunction(() => document.querySelector('#background-mask').value === '90');
+  await setRange(first.page, 'background-mask', 23, 'input');
+  assert.match(await first.page.evaluate(() => getComputedStyle(document.querySelector('#cover-background'), '::after').backgroundColor), /0\.23/);
+  await first.page.evaluate(() => mixlinkTheme.set('light'));
+  await first.page.waitForFunction(() => document.querySelector('#background-mask').value === '0');
   const before = await first.page.evaluate(() => Object.fromEntries(Object.entries(localStorage)));
   assert.equal(before['mixtunes-background-blur-cover'], '40');
   assert.equal(before['mixtunes-background-opacity'], '35');
+  assert.equal(before['mixtunes-background-mask-light'], '0');
+  assert.equal(before['mixtunes-background-mask-dark'], '23');
 
   const windowId = await first.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.getTitle() === 'MixTunes').id);
   await first.app.evaluate(({ BrowserWindow }, id) => BrowserWindow.fromId(id).close(), windowId);
@@ -68,5 +77,9 @@ test('packaged Windows keeps live blur and opacity across tray hiding and restar
   assert.equal(await second.page.locator('#background-blur').inputValue(), '40');
   assert.equal(await second.page.locator('#background-opacity').inputValue(), '35');
   assert.equal(await second.page.locator('#background-blur-value').textContent(), '40px');
+  assert.equal(await second.page.locator('#background-mask').inputValue(), '0');
+  await second.page.evaluate(() => mixlinkTheme.set('dark'));
+  await second.page.waitForFunction(() => document.querySelector('#background-mask').value === '23');
+  assert.equal(await second.page.evaluate(() => getComputedStyle(document.querySelector('#cover-background')).pointerEvents), 'none');
   await second.app.close().catch(() => {});
 });
