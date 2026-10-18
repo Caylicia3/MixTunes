@@ -515,6 +515,42 @@
     return String(typeof error === 'string' ? error : error?.message || '暂时无法完成请求').slice(0, 300);
   }
 
+  function onlineMetadataIdentity(title, artist) {
+    const normalise = (value) => (typeof value === 'string' ? value.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLowerCase() : '');
+    const name = normalise(title), by = normalise(artist);
+    return name && by ? JSON.stringify([name, by]) : null;
+  }
+  function playlistHasOnlineMetadata(playlist, item) {
+    const identity = onlineMetadataIdentity(item.title, item.artist);
+    if (!identity) return false;
+    const tracks = new Map((state.tracks || []).map((track) => [track.key, track]));
+    return (playlist.queue || []).some((key) => onlineMetadataIdentity(tracks.get(key)?.title, tracks.get(key)?.artist) === identity);
+  }
+  function onlineAdditionSummary(entry) {
+    const additions = Object.values(entry.additions || {});
+    return {
+      adding: additions.some((addition) => addition.status === 'adding'),
+      joined: additions.filter((addition) => addition.status === 'added' || addition.status === 'exists').length,
+      duplicate: additions.some((addition) => addition.status === 'duplicate'),
+      failed: additions.some((addition) => addition.status === 'error')
+    };
+  }
+  function reconcileOnlineAdditions() {
+    if (!byId('online-search-dialog').open) return;
+    let changed = false;
+    for (const record of Object.values(onlineSearch.platforms)) {
+      for (const entry of record.entries || []) {
+        for (const [playlistId, addition] of Object.entries(entry.additions || {})) {
+          const playlist = (state.playlists || []).find((item) => item.id === playlistId);
+          let stale = !playlist;
+          if (!stale && (addition.status === 'added' || addition.status === 'exists')) stale = !addition.key || !(playlist.queue || []).includes(addition.key);
+          if (!stale && addition.status === 'duplicate') stale = !playlistHasOnlineMetadata(playlist, entry.item);
+          if (stale) { delete entry.additions[playlistId]; changed = true; }
+        }
+      }
+    }
+    if (changed) renderOnlineSearch();
+  }
   function renderSearchTarget() {
     const text = onlineSearch.query ? `搜索「${onlineSearch.query}」` : '';
     byId('online-search-target').textContent = text;
@@ -564,7 +600,7 @@
         const option = document.createElement('option');
         option.value = playlist.id;
         const status = entry.additions?.[playlist.id]?.status;
-        const suffix = ({ adding: '加入中…', added: '已加入', exists: '已存在', error: '添加失败' })[status];
+        const suffix = ({ adding: '加入中…', added: '已加入', exists: '已存在', duplicate: '同名同作者', error: '添加失败' })[status];
         option.textContent = `${playlist.name}${suffix ? ` · ${suffix}` : ''}`;
         fragment.append(option);
       }
@@ -573,7 +609,7 @@
     }
     const addition = entry.additions?.[select.value];
     const status = byId('search-add-status');
-    status.textContent = addition?.error || ({ adding: '加入中…', added: '已加入这个歌单，可继续选择其他歌单', exists: '这个歌单中已存在' })[addition?.status] || (!playlists.length ? '请先创建歌单' : '');
+    status.textContent = addition?.error || ({ adding: '加入中…', added: '已加入这个歌单，可继续选择其他歌单', exists: '这个歌单中已存在', duplicate: '这个歌单中已有同名同作者歌曲，未重复添加' })[addition?.status] || (!playlists.length ? '请先创建歌单' : '');
     status.hidden = !status.textContent;
     status.classList.toggle('error', addition?.status === 'error');
     select.disabled = !playlists.length;
@@ -606,16 +642,25 @@
       if (!api?.addSearchResult) throw new Error('搜索连接尚未就绪');
       const result = await api.addSearchResult({ requestId: entry.requestId, platform, id: entry.item.id, playlistId });
       if (!result || result.ok === false) throw new Error(searchError(result?.error || '未能加入歌单'));
+      const status = result.status || (Number(result.added) > 0 ? 'added' : Number(result.existingKey) > 0 ? 'exists' : Number(result.duplicateMetadata) > 0 ? 'duplicate' : '');
+      if (!['added', 'exists', 'duplicate'].includes(status)) throw new Error('加入未完成，请重试');
       if (serial !== onlineSearch.serial || !byId('online-search-dialog').open) return;
-      addition.status = Number(result.added) > 0 ? 'added' : 'exists';
-      addition.message = addition.status === 'added' ? `已加入「${playlist.name}」` : `「${playlist.name}」中已存在`;
+      addition.status = status;
+      addition.key = typeof result.key === 'string' ? result.key : '';
+      addition.message = status === 'added' ? `已加入「${playlist.name}」`
+        : status === 'exists' ? `「${playlist.name}」中已存在`
+        : `「${playlist.name}」中已有同名同作者歌曲，未重复添加`;
       onlineMessage(addition.message);
+      showNotice(addition.message);
+      renderOnlineSearch();
       if (searchAddTarget?.entry === entry && searchAddTarget.serial === serial && byId('search-add-playlist').value === playlistId) byId('search-add-dialog').close();
     } catch (error) {
       if (serial !== onlineSearch.serial || !byId('online-search-dialog').open) return;
       addition.status = 'error';
       addition.error = searchError(error);
-      if (!byId('search-add-dialog').open || searchAddTarget?.entry !== entry || byId('search-add-playlist').value !== playlistId) onlineMessage(`未能加入「${playlist.name}」：${addition.error}`, true);
+      onlineMessage(`未能加入「${playlist.name}」：${addition.error}`, true);
+      showNotice(`未能加入「${playlist.name}」：${addition.error}`, true);
+      renderOnlineSearch();
     }
     if (serial === onlineSearch.serial && byId('online-search-dialog').open) renderSearchAddDialog();
   }
@@ -946,8 +991,15 @@
           const duration = document.createElement('span');
           duration.className = 'online-result-duration';
           duration.textContent = Number(item.durationMs) > 0 ? time(item.durationMs) : '—';
-          const add = createButton('＋', `选择歌单添加 ${item.title || '歌曲'}`, 'online-result-add', () => openSearchAddDialog(platform, entry));
+          const summary = onlineAdditionSummary(entry);
+          const detail = [summary.joined ? `已加入 ${summary.joined} 个歌单` : '', summary.duplicate ? '同名同作者已存在' : '', summary.failed ? '上次添加失败，可重试' : ''].filter(Boolean).join('；');
+          const add = createButton(summary.adding ? '…' : summary.joined ? '✓' : '＋',
+            `选择歌单添加 ${item.title || '歌曲'}${detail ? `（${detail}）` : ''}`,
+            'online-result-add' + (summary.joined ? ' added-online-result' : ''), () => openSearchAddDialog(platform, entry));
           add.dataset.testid = 'online-result-add';
+          add.dataset.added = String(summary.joined);
+          add.dataset.duplicate = summary.duplicate ? 'true' : 'false';
+          add.dataset.failed = summary.failed ? 'true' : 'false';
           const play = createButton(entry.previewing ? '…' : '▶', `播放 ${item.title || '歌曲'}`, 'online-result-play', () => playOnlineResult(platform, entry));
           play.dataset.testid = 'online-result-play';
           play.disabled = Boolean(entry.previewing);
@@ -1227,6 +1279,7 @@
     }
     renderVideoPanel();
     renderPlaylists();
+    reconcileOnlineAdditions();
     renderSearchAddDialog();
     renderList();
     const current = currentTrack();
