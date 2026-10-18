@@ -4,12 +4,12 @@ MixTunes 是一款跨平台歌单播放器，支持在同一份歌单中播放 Q
 
 ## 下载
 
-在 [GitHub Releases](https://github.com/Caylicia3/MixTunes/releases/latest) 下载个人 Fork 发布的 **v1.1.0** 安装包（候选版本需等待正式发布）：
+在 [GitHub Releases](https://github.com/Caylicia3/MixTunes/releases/latest) 下载个人 Fork 发布的 **v1.1.0** 安装包：
 
 | 平台 | 文件 | 要求 |
 | --- | --- | --- |
-| Windows | `MixTunes-1.1.0-win-x64.zip` | Windows 10/11，x64 |
-| Android | `MixTunes-Android-1.1.0.apk` | Android 8.0 及以上 |
+| Windows | [MixTunes-1.1.0-win-x64.zip](https://github.com/Caylicia3/MixTunes/releases/download/v1.1.0/MixTunes-1.1.0-win-x64.zip) | Windows 10/11，x64 |
+| Android | [MixTunes-Android-1.1.0.apk](https://github.com/Caylicia3/MixTunes/releases/download/v1.1.0/MixTunes-Android-1.1.0.apk) | Android 8.0 及以上，versionCode 14 |
 
 Windows 请将 ZIP 完整解压到新目录，再运行其中的 `MixTunes.exe`，不要只取出 EXE。升级前从托盘退出旧程序，保留旧目录和数据目录。Android 需要允许从所用浏览器或文件管理器安装 APK；升级时使用同一来源的安装包覆盖安装。
 
@@ -98,7 +98,7 @@ Windows 和 Android 统一使用原创「折带播放」图标。可编辑源文
 
 本轮新增双端定位、搜索范围说明、封面及本地裁剪背景、背景效果预览、原创图标、睡眠定时器和搜索添加反馈，Windows 支持关闭到托盘。最近播放历史和搜索排序未实现，不在本次发布范围。
 
-安装、升级、数据边界和构建验证见 [1.1.0 发布说明](docs/releases/v1.1.0.md)；候选测试记录见 [测试报告](docs/releases/v1.1.0-tests.md)。历史任务文档保留当时的验证状态，最终记录以本轮测试报告为准。
+安装、升级、数据边界和已知 Issue #16、#25 见 [1.1.0 发布说明](docs/releases/v1.1.0.md)；309 项 Node、91 项 UI、6 项打包集成测试及双端人工验收确认见 [最终测试报告](docs/releases/v1.1.0-mask-tests.md)。历史任务文档保留当时的验证状态，不代表这些已知问题已修复。
 
 ## 许可
 
