@@ -1,6 +1,7 @@
 'use strict';
 const { contextBridge, ipcRenderer }=require('electron');
 contextBridge.exposeInMainWorld('playerAPI',{
+  background:(action,payload)=>ipcRenderer.invoke('app:background',action,payload),
   getState:()=>ipcRenderer.invoke('app:state'),
   importLinks:text=>ipcRenderer.invoke('app:import-links',text),
   command:(name,payload={})=>ipcRenderer.invoke('app:command',name,payload),

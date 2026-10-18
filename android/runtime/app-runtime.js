@@ -159,6 +159,7 @@
   })();
   async function invoke(fn){try{await ready;return await fn();}catch(error){return{ok:false,error:errorMessage(error)};}}
   window.playerAPI={
+    background:(action,payload={})=>native(action==='pick'?'background-pick':action==='editor'?'background-editor':'storage-background-'+action,payload,{timeoutMs:action==='pick'?600000:30000}),
     getState:async()=>{await ready;return engine.snapshot();},
     command:(name,payload={})=>invoke(()=>command(name,payload)),
     importLinks:text=>invoke(()=>importLinks(text)),
