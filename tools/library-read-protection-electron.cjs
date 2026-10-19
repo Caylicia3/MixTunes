@@ -59,3 +59,33 @@ test('packaged first run initializes and restarts', {timeout:50000,skip:process.
   assert.equal(await launch(directory),0);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(directory,'library.json'),'utf8')),first);
 });
+
+test('packaged quit cancels an active timer and saves a valid migrated library', {timeout:30000,skip:process.platform!=='win32'}, async t=>{
+  const {_electron} = require('../app/node_modules/playwright-core');
+  const directory=isolated('active-timer-quit'),file=path.join(directory,'library.json');
+  const original=Buffer.from(JSON.stringify({tracks:[{key:'netease:1',platform:'netease',sourceId:'1',url:'https://music.163.com/song?id=1',title:'Legacy song'}],queue:['netease:1']}));
+  fs.writeFileSync(file,original);
+  const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
+  const app=await _electron.launch({executablePath:executable,args:['--test-mode','--data-dir='+directory],env});
+  t.after(()=>app.close().catch(()=>{}));
+  let output='';app.process().stdout.on('data',chunk=>{output+=chunk.toString();});
+  const page=await app.firstWindow();
+  await page.waitForFunction(()=>document.getElementById('connection-status').textContent==='已就绪');
+  const before=await app.evaluate(({app})=>{
+    const state=app.__mixSleepTest.startSeconds(60);
+    // Main's before-quit handler was registered first. Observe its completed
+    // synchronous cleanup through the public test hook, then the real exit.
+    app.once('before-quit',()=>process.stdout.write('P04-QUIT:'+JSON.stringify({timerActive:app.__mixSleepTest.state().active})+'\n'));
+    return {active:state.active,packaged:app.isPackaged};
+  });
+  assert.deepEqual(before,{active:true,packaged:true});
+  const exited=new Promise(resolve=>app.process().once('exit',resolve));
+  await app.evaluate(({app})=>{setTimeout(()=>app.quit(),0);});
+  assert.equal(await exited,0);
+  assert.match(output,/P04-QUIT:\{"timerActive":false\}/);
+  const saved=JSON.parse(fs.readFileSync(file,'utf8'));
+  assert.equal(saved.schemaVersion,2);assert.equal(saved.tracks[0].key,'netease:1');
+  assert.deepEqual(saved.playlists[0].queue,['netease:1']);
+  assert.deepEqual(fs.readFileSync(path.join(directory,'library-v1-before-migration.json')),original);
+  assert.equal(fs.existsSync(file+'.tmp'),false);
+});

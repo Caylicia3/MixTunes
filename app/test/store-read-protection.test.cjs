@@ -98,7 +98,7 @@ test(`real main startup reports ${input} before engine/window and preserves on q
   const vm = require('node:vm'), {createRequire} = require('node:module');
   const store = isolated(t), original = Buffer.from(input);
   fs.writeFileSync(store.file, original);
-  const calls = [], handlers = new Map();
+  const calls = [], handlers = new Map(), initialized = [];
   const electron = {
     protocol:{registerSchemesAsPrivileged(){}},
     app:{setPath(){},getPath(){return store.directory;},setName(){},requestSingleInstanceLock(){return true;},
@@ -107,8 +107,24 @@ test(`real main startup reports ${input} before engine/window and preserves on q
     globalShortcut:{unregisterAll(){}}
   };
   const main = path.resolve(__dirname,'../src/main.cjs'), localRequire = createRequire(main);
+  const monitored = {
+    './engine.cjs':['PlayerEngine'], './audio-player.cjs':['AudioPlayer'],
+    './sleep-timer.cjs':['createSleepTimer'],
+    './tray.cjs':['createAppTray'], './window-lifecycle.cjs':['installMainWindowLifecycle']
+  };
+  function requireForMain(name) {
+    if (name === 'electron') return electron;
+    const exports = localRequire(name);
+    if (!monitored[name]) return exports;
+    const wrapped = {...exports};
+    for (const key of monitored[name]) wrapped[key] = new Proxy(exports[key], {
+      apply(fn, receiver, args) { initialized.push(key); return Reflect.apply(fn,receiver,args); },
+      construct(fn, args) { initialized.push(key); return Reflect.construct(fn,args); }
+    });
+    return wrapped;
+  }
   vm.runInNewContext(fs.readFileSync(main,'utf8'), {
-    require:name=>name==='electron'?electron:localRequire(name),
+    require:requireForMain,
     process:{argv:[],env:{}},__dirname:path.dirname(main),console,setTimeout,clearTimeout,URL,URLSearchParams
   }, {filename:main});
   await new Promise(resolve=>setImmediate(resolve));
@@ -117,6 +133,8 @@ test(`real main startup reports ${input} before engine/window and preserves on q
   assert.match(calls[0][2], /保留原文件.*禁止保存.*备份 library.json.*访问权限/);
   assert.deepEqual(calls[1], ['exit',1]);
   handlers.get('before-quit')();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(initialized, [], 'failed load never creates engine, timer, audio or tray lifecycle');
   assert.deepEqual(fs.readFileSync(store.file), original);
   assert.equal(fs.existsSync(store.file+'.tmp'), false);
 });
