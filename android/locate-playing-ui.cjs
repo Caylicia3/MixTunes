@@ -88,6 +88,8 @@ test('Android locate UI and bundled runtime in isolated mobile browser', async t
       assert.equal(await page.locator('#library-filter').inputValue(), '');
       assert.equal(await page.locator('#screen-library').isVisible(), true);
       await assertVisible(page);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      assert.equal(await located(page).evaluate(row => getComputedStyle(row).animationName), 'none');
       assert.deepEqual(await commands(page), [{ name: 'playlist-select', payload: { id: 'source' } }]);
       const snapshot = await page.evaluate(() => fixtureState);
       assert.equal(snapshot.positionMs, 42000); assert.equal(snapshot.status, 'paused');

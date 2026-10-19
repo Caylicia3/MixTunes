@@ -67,6 +67,8 @@ test('Windows locate UI with isolated bridge and no external requests', async (t
     assert.equal(playback.focused, initial.currentKey);
     if (process.env.MIXTUNES_SCREENSHOT) await page.screenshot({ path: process.env.MIXTUNES_SCREENSHOT });
     assert.ok(playback.rect.top >= playback.region.top && playback.rect.bottom <= playback.region.bottom, JSON.stringify(playback));
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    assert.equal(await located(page).evaluate(row => getComputedStyle(row).animationName), 'none');
     await locate(page);
     assert.equal((await commands(page)).length, 1);
     if (process.env.MIXTUNES_SCREENSHOT) await page.screenshot({ path: process.env.MIXTUNES_SCREENSHOT });
