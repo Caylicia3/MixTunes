@@ -1,0 +1,18 @@
+/* Decorative images only: the application and dialogs never receive a blur filter. */
+.cover-background { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; visibility: hidden; opacity: 0; transition: opacity .22s ease; }
+.cover-background > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; filter: blur(24px); transform: scale(1.12); opacity: 0; transition: opacity .22s ease; }
+.cover-background::after { content: ''; position: absolute; inset: 0; background: rgba(255, 255, 255, .88); }
+:root[data-theme="dark"] .cover-background::after { background: rgba(32, 33, 35, .90); }
+.has-cover-background .cover-background { visibility: visible; opacity: 1; }
+.has-cover-background .app { position: relative; z-index: 1; }
+:root.has-cover-background:not([data-theme="dark"]) { --muted: #565861; --subtle: #62646b; --placeholder: #62646b; }
+:root.has-cover-background[data-theme="dark"] { --muted: #c3c3cb; --subtle: #b5b5bd; --placeholder: #b5b5bd; }
+label.cover-background-setting { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; cursor: pointer; font-size: .93rem; }
+.cover-background-setting > span { min-width: 0; overflow-wrap: anywhere; }
+#cover-background-setting-status { font-size: .86rem; }
+.cover-background-setting input[type="checkbox"] { appearance: none; position: relative; flex-shrink: 0; width: 36px; height: 22px; min-width: 36px; min-height: 22px; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 99px; background: var(--selected); cursor: pointer; }
+.cover-background-setting input[type="checkbox"]::before { content: ''; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .16s ease; }
+.cover-background-setting input[type="checkbox"]:checked { background: var(--text); }
+.cover-background-setting input[type="checkbox"]:checked::before { background: var(--surface); transform: translateX(14px); }
+@media (max-width: 600px) { .cover-background > img { filter: blur(18px); } }
+@media (prefers-reduced-motion: reduce) { .cover-background, .cover-background > img, .cover-background-setting input[type="checkbox"]::before { transition: none; } }

@@ -20,6 +20,12 @@
     var ready = false, screen = 'library', stack = [], focusBeforeSheet = null, noticeTimer = null;
     var filter = '', librarySignature = '', accountSignature = '', sheetSignature = '', searchExistingSignature = '', subscribedApi = null;
     var seeking = false, changingVolume = false, retryCount = 0, retryTimer = null;
+    var coverBackground = window.mixTunesCoverBackground.create({
+      container: $('cover-background'), allowDataImages: true,
+      onStorageError: function () { $('cover-background-setting-status').textContent = '当前环境无法保存设置，仅本次有效。'; }
+    });
+    $('cover-background-enabled').checked = coverBackground.enabled();
+    $('cover-background-enabled').addEventListener('change', function (event) { coverBackground.setEnabled(event.target.checked); });
     var search = { serial: 0, query: '', filter: 'all', records: {} };
     var lyrics = { serial: 0, key: null, status: 'idle', lines: [], follow: true, activeTime: null, failed: false };
     var lyricsReturnScreen = 'library';
@@ -60,6 +66,7 @@
       }); replace($('song-list'), rows);
     }
     function renderPlayer() {
+      coverBackground.update(state);
       var track = current(), max = duration(track), enabled = ready && Boolean(track || (state.playbackQueue || state.queue).length);
       $('current-title').textContent = track ? title(track) : '选择歌曲播放';
       var quality = state.playbackQuality, qualityLabel = quality && quality.actual && quality.actual !== 'unknown' ? quality.label || quality.actual : '';
