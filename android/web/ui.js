@@ -11,6 +11,7 @@
   function init() {
     var $ = function (id) { return document.getElementById(id); };
     var platforms = ['qq', 'netease', 'bilibili'];
+    var sleepTimerSettings = window.mixTunesSleepTimer?.mount({ api: window.playerAPI, anchor: $('account-list'), card: true });
     var names = { qq: 'QQ 音乐', netease: '网易云', bilibili: 'B 站' };
     var modes = ['sequential', 'repeat-all', 'repeat-one', 'shuffle'];
     var modeNames = { sequential: '顺序播放', 'repeat-all': '列表循环', 'repeat-one': '单曲循环', shuffle: '随机播放' };
@@ -38,7 +39,7 @@
     function command(name, payload) { var api = window.playerAPI; if (!api || typeof api.command !== 'function') return Promise.reject(new Error('尚未连接，请稍后重试')); return Promise.resolve(api.command(name, payload || {})).then(function (value) { if (value && value.ok === false) throw new Error(value.error || '操作未完成'); return value; }); }
     async function run(action, node, message) { var wasDisabled = node && node.disabled; if (node) node.disabled = true; try { var value = await action(); if (message) toast(value && value.message || message); return true; } catch (error) { toast(error.message || error, true); return false; } finally { if (node && document.documentElement.contains(node)) node.disabled = Boolean(wasDisabled); } }
     function cover(node, track, fallback) { clear(node); node.appendChild(document.createTextNode(fallback || '♫')); var source = track && track.coverUrl; if (typeof source !== 'string') return; try { var url = new URL(source); if (url.protocol !== 'https:' && !/^data:image\/(png|jpeg|gif|webp);base64,/i.test(source)) return; } catch (ignore) { return; } var img = document.createElement('img'); img.alt = ''; img.loading = 'lazy'; img.src = source; img.addEventListener('error', function () { if (img.parentNode) img.parentNode.removeChild(img); }); clear(node); node.appendChild(img); }
-    function changeScreen(value) { if (screen === 'lyrics' && value !== 'lyrics') { lyrics.serial++; if (lyrics.status === 'loading') lyrics.status = 'idle'; } screen = ['library', 'search', 'settings', 'lyrics'].indexOf(value) !== -1 ? value : 'library'; closeAll(); ['library', 'search', 'settings', 'lyrics'].forEach(function (name) { $('screen-' + name).hidden = name !== screen; }); document.querySelectorAll('[data-screen]').forEach(function (node) { var selected = node.dataset.screen === (screen === 'lyrics' ? lyricsReturnScreen : screen); node.classList.toggle('active', selected); if (selected) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); }); $('main-content').scrollTop = 0; }
+    function changeScreen(value) { if (screen === 'lyrics' && value !== 'lyrics') { lyrics.serial++; if (lyrics.status === 'loading') lyrics.status = 'idle'; } screen = ['library', 'search', 'settings', 'lyrics'].indexOf(value) !== -1 ? value : 'library'; closeAll(); ['library', 'search', 'settings', 'lyrics'].forEach(function (name) { $('screen-' + name).hidden = name !== screen; }); document.querySelectorAll('[data-screen]').forEach(function (node) { var selected = node.dataset.screen === (screen === 'lyrics' ? lyricsReturnScreen : screen); node.classList.toggle('active', selected); if (selected) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); }); $('main-content').scrollTop = 0; if (screen === 'settings') sleepTimerSettings?.refresh(); }
     function renderLibrary() {
       var playlist = active(), ordered = (state.queue || []).map(function (key, index) { return { track: state.tracks.find(function (track) { return track.key === key; }), index: index + 1 }; }).filter(function (entry) { return entry.track; });
       $('playlist-title').textContent = playlist ? playlist.name : '我的歌单'; $('queue-count').textContent = ordered.length + ' 首';
@@ -141,7 +142,7 @@
     async function connect() {
       clearTimeout(retryTimer);
       try {
-        var value = await invoke('getState'); if (!value || !Array.isArray(value.tracks)) throw new Error('播放器正在启动'); ready = true; retryCount = 0; $('retry-connect').hidden = true;
+        var value = await invoke('getState'); if (!value || !Array.isArray(value.tracks)) throw new Error('播放器正在启动'); ready = true; retryCount = 0; $('retry-connect').hidden = true; sleepTimerSettings?.refresh();
         var api = window.playerAPI; if (api !== subscribedApi) { subscribedApi = api; if (typeof api.onState === 'function') api.onState(render); if (typeof api.onNotice === 'function') api.onNotice(function (notice) { toast(typeof notice === 'string' ? notice : notice.message || notice.error || '操作未完成', Boolean(notice && (notice.error || notice.type === 'error'))); }); }
         render(value); themeChanged();
       } catch (error) { ready = false; $('retry-connect').hidden = false; render(); if (retryCount++ < 12) retryTimer = setTimeout(connect, 500); }
