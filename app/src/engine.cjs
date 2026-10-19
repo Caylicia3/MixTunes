@@ -317,7 +317,9 @@ class PlayerEngine extends EventEmitter {
       }
       if(event.rangeReset&&this.active?.backend==='audio')this.audio.setRange?.(this.active.entry,this.current().playRange||{startMs:0,endMs:null});
       if(Number.isFinite(event.positionMs)){
-        if(event.type==='progress'&&this.state.status==='playing')this.noteHistoryProgress(event.positionMs);
+        if(this.historyClock&&(pendingSeek||event.type==='seeked')){
+          this.historyClock.lastPositionMs=event.positionMs;this.historyClock.lastTickAt=this.now();
+        }else if(event.type==='progress'&&this.state.status==='playing')this.noteHistoryProgress(event.positionMs);
         this.state.positionMs=clampToPlayRange(event.positionMs,range);
         if(this.active?.backend!=='audio'&&event.positionMs<range.startMs-100){this.seek(range.startMs).catch(error=>this.notice(errorMessage(error)));}
         if(this.wantsPlayback&&range.endMs!==null&&event.positionMs>=range.endMs){this.finishRange(event.generation,event.key);return;}
@@ -459,6 +461,7 @@ class PlayerEngine extends EventEmitter {
     this.seekPosition={generation,positionMs};
     this.seekTimer=setTimeout(()=>{if(this.seekTarget?.revision===revision){this.clearSeek();this.notice('跳转仍在缓冲，请稍候或重试。');}},12000);this.seekTimer.unref?.();
     this.state.positionMs=positionMs;
+    if(this.historyClock){this.historyClock.lastPositionMs=positionMs;this.historyClock.lastTickAt=this.now();}
     if(this.active?.backend==='audio')this.audio.seek(this.active.entry,positionMs);
     else if(['web','video'].includes(this.active?.backend)&&this.active.ready)await this.browserBackend().seek(positionMs);
     if(this.generation!==generation||this.seekRevision!==revision)return;

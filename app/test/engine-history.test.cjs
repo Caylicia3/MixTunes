@@ -96,6 +96,31 @@ test('short songs use half their duration as the threshold', async t => {
   assert.equal(engine.historyList().length, 1);
 });
 
+test('small explicit seeks and their acknowledgements never count as listening', async t => {
+  const { engine, advance, start, progress } = make(t, { duration: 120000 });
+  const key = 'netease:1', generation = await start(key);
+  for (let i = 1; i <= 6; i++) {
+    await engine.seek(i * 600);
+    engine.onEvent({ type: 'seeked', key, generation, positionMs: i * 600 });
+    advance(10); progress(key, generation, i * 600 + 10);
+  }
+  assert.equal(engine.historyList().length, 0);
+  assert.equal(engine.historyClock.playedMs, 60);
+  advance(2940); progress(key, generation, 6550);
+  assert.equal(engine.historyList().length, 1, 'real listening after seeks still reaches the threshold');
+});
+
+test('progress acknowledging a pending seek only resets the history baseline', async t => {
+  const { engine, advance, start, progress } = make(t);
+  const key = 'netease:1', generation = await start(key);
+  advance(1000); progress(key, generation, 1000);
+  await engine.seek(1600);
+  advance(10); progress(key, generation, 1600);
+  assert.equal(engine.historyClock.playedMs, 1000);
+  advance(2000); progress(key, generation, 3600);
+  assert.equal(engine.historyList().length, 1);
+});
+
 test('pause and resume do not duplicate an entry and retain accumulated time', async t => {
   const { engine, advance, start, progress } = make(t);
   const generation = await start('netease:1');

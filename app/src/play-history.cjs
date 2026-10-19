@@ -91,6 +91,15 @@ function normaliseHistory(entries, { max = MAX_ENTRIES, newId = randomUUID } = {
   return result.slice(0, limit);
 }
 
+function readHistory(data) {
+  if (Array.isArray(data)) return normaliseHistory(data);
+  if (!data || typeof data !== 'object' || !Array.isArray(data.entries)
+      || (data.schemaVersion !== undefined && data.schemaVersion !== 1)) {
+    throw new Error('播放历史格式无法读取');
+  }
+  return normaliseHistory(data.entries);
+}
+
 // Effective listening time, not the seek bar position. Very short tracks use
 // half their duration so a 2-second song can still enter history after play.
 function historyThreshold(durationMs) {
@@ -148,5 +157,6 @@ module.exports = {
   historyThreshold,
   normaliseEntry,
   normaliseHistory,
+  readHistory,
   pickExtra,
 };

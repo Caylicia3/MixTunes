@@ -6,11 +6,14 @@
   const {readQqAuth,readNeteaseAuth,restoredAccountState,inspectAccount}=req('./platform-auth.cjs');
   const {LyricsService}=req('./lyrics.cjs'),{normaliseShareLink}=req('./share-link.cjs');
   const {mergeTransferredLibrary}=req('./playlist-transfer.cjs'),{shouldPause}=req('./sleep-timer.cjs');
+  const {readHistory}=req('./play-history.cjs');
   const stateListeners=new Set(),noticeListeners=new Set(),contexts=new Map();
   let engine,searchService,lyricsService,importing=false,saveQueue=Promise.resolve(),historySaveQueue=Promise.resolve(),accountsPromise=null,accountsRefreshAgain=false,pendingVideo=null,videoRequest=0,transportRequest=0,savedAt=0;
   const libraryKey='mixtunes-library-v2';
+  let historyReadFailed=false;
   function notice(message){for(const fn of noticeListeners){try{fn(errorMessage(message));}catch{}}}
   function persistHistory(data){
+    if(historyReadFailed){notice('播放历史暂时无法读取，本次不会覆盖原文件');return;}
     // History is independent from library.json. Its failure is reported once but
     // must never reject playback or replace the user's saved playlists.
     const entries=Array.isArray(data)?data:data?.entries;
@@ -165,8 +168,8 @@
     if((nativeText||localText)&&!nativeSaved&&!localSaved)notice('本地歌单暂时无法读取，请导入备份');
     let history=[];try{
       const raw=(await native('history-load',{}))?.json;
-      if(raw){const data=JSON.parse(raw);history=Array.isArray(data?.entries)?data.entries:data;}
-    }catch{}
+      if(raw!==null&&raw!==undefined)history=readHistory(JSON.parse(raw));
+    }catch{historyReadFailed=true;}
     engine=new PlayerEngine({library:normaliseLibrary(library),resolveTrack,contextFor,audio:new NativeAudio(),web:new NativeWeb('web'),video:new NativeWeb('video'),persist,record:()=>{},history,persistHistory});
     searchService=new SearchService({searchPlatform,contextFor,importResource,parseInput,safeTrack,engine});
     lyricsService=new LyricsService({engine,contextFor});
