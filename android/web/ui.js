@@ -25,6 +25,7 @@
     var queueSheet = { status: 'idle', data: null, error: '', signature: '', serial: 0 };
     var historySheet = { status: 'idle', entries: [], error: '', version: null, serial: 0, clearArmed: false, clearTimer: null };
     var queueDrag = null;
+    var queueCommandBusy = false;
     var lyricsReturnScreen = 'library';
     function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
     function element(tag, className, text) { var node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; }
@@ -249,19 +250,22 @@
     }
     function openQueueSheet() { queueSheet = { status: 'loading', data: null, error: '', signature: '', serial: queueSheet.serial }; queueDrag = null; openSheet('queue'); loadQueueSheet(); }
     async function moveQueueSheet(from, to) {
-      if (!Number.isInteger(from) || !Number.isInteger(to) || from === to) return;
+      if (queueCommandBusy || !Number.isInteger(from) || !Number.isInteger(to) || from === to) return;
+      queueCommandBusy = true;
       try {
         var data = await command('queue-move', { fromIndex: from, toIndex: to, limit: 50 });
         if (!stack.length || stack[stack.length - 1].type !== 'queue') return;
         queueSheet.status = 'ready'; queueSheet.data = data; queueSheet.signature = queueSheetSignature(); renderSheet();
-      } catch (error) { toast(String(error.message || error), true); }
+      } catch (error) { toast(String(error.message || error), true); } finally { queueCommandBusy = false; }
     }
     async function playNextInSheet(key) {
+      if (queueCommandBusy) return;
+      queueCommandBusy = true;
       try {
         var data = await command('queue-play-next', { key: key, limit: 50 });
         if (!stack.length || stack[stack.length - 1].type !== 'queue') return;
         queueSheet.status = 'ready'; queueSheet.data = data; queueSheet.signature = queueSheetSignature(); renderSheet(); toast('已设为下一首播放');
-      } catch (error) { toast(String(error.message || error), true); }
+      } catch (error) { toast(String(error.message || error), true); } finally { queueCommandBusy = false; }
     }
     function renderHistorySheet() {
       $('sheet-title').textContent = '播放历史';

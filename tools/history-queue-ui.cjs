@@ -50,6 +50,7 @@ function mockScript() {
     push();
   };
   window.__setUpcoming = (keys) => { upcoming = keys.slice(); push(); };
+  window.__setHistory = (entries) => { history = entries.slice(); state.historyCount = history.length; state.historyVersion += 1; push(); };
   window.playerAPI = {
     getState: async () => clone(state),
     onState: (fn) => { listeners.push(fn); return () => {}; },
@@ -251,7 +252,8 @@ async function fixture(browser, mobile, viewport) {
         await page.evaluate(() => { window.__failHistory = false; });
         await page.locator('#history-retry').click();
         await page.waitForFunction(() => document.querySelectorAll('.history-row, .history-sheet-row').length === 0);
-        if (mobile) await page.locator('#close-sheet').click(); else await page.locator('#close-history').click();        assert.deepEqual(errors, []);
+        if (mobile) await page.locator('#close-sheet').click(); else await page.locator('#close-history').click();
+        assert.deepEqual(errors, []);
         console.log(`PASS ${client} history + queue UI`);
       } finally { await context.close(); }
     }
@@ -272,8 +274,15 @@ async function fixture(browser, mobile, viewport) {
         await page.locator('#open-history').click();
         await page.locator('.history-sheet-row').first().waitFor();
         assert.equal(await page.locator('#history-clear-sheet').isVisible(), true);
+        const many = Array.from({ length: 500 }, (_, index) => ({ id: `many-${index}`, key: 'a', platform: 'netease', sourceId: '1', title: `历史 ${index}`, artist: '歌手', durationMs: 180000, playedAt: Date.now() - index * 1000 }));
+        const started = Date.now();
+        await page.evaluate((entries) => window.__setHistory(entries), many);
+        await page.waitForFunction((selector) => document.querySelectorAll(selector).length === 500, '.history-sheet-row');
+        const elapsed = Date.now() - started;
+        assert.ok(elapsed < 3000, `500-row history rendered in ${elapsed}ms`);
+        await page.locator('#close-sheet').click();
         assert.deepEqual(errors, []);
-        console.log('PASS android 320px layout');
+        console.log('PASS android 320px layout; 500 history rows rendered in ' + elapsed + 'ms');
       } finally { await context.close(); }
     }    console.log('PASS history/queue UI on Windows and Android');
   } finally {

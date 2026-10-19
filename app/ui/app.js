@@ -49,6 +49,7 @@
   let historyDialogVersion = null;
   let historyDialogSerial = 0;
   let historyClearTimer = null;
+  let queueCommandBusy = false;
 
   function emptySearchPlatforms() {
     return Object.fromEntries(Object.keys(platformNames).map((platform) => [platform, { status: 'idle', entries: [], page: 0, total: 0, hasMore: false, moreLoading: false, error: '', failedPage: null, requestSequence: 0 }]));
@@ -454,26 +455,32 @@
   }
 
   async function moveQueue(fromIndex, toIndex) {
-    if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex) || fromIndex === toIndex) return;
-    const result = await command('queue-move', { fromIndex, toIndex, limit: 50 });
-    if (result && Array.isArray(result.upcoming)) {
-      queueDialogData = result;
-      queueDialogSignature = queueStateSignature();
-      renderQueue(result);
-      queueStatus('');
-    }
+    if (queueCommandBusy || !Number.isInteger(fromIndex) || !Number.isInteger(toIndex) || fromIndex === toIndex) return;
+    queueCommandBusy = true;
+    try {
+      const result = await command('queue-move', { fromIndex, toIndex, limit: 50 });
+      if (result && Array.isArray(result.upcoming)) {
+        queueDialogData = result;
+        queueDialogSignature = queueStateSignature();
+        renderQueue(result);
+        queueStatus('');
+      }
+    } finally { queueCommandBusy = false; }
   }
 
   async function playNextQueue(key) {
-    if (!key) return;
-    const result = await command('queue-play-next', { key, limit: 50 });
-    if (result && Array.isArray(result.upcoming)) {
-      queueDialogData = result;
-      queueDialogSignature = queueStateSignature();
-      renderQueue(result);
-      queueStatus('');
-      showNotice('已设为下一首播放');
-    }
+    if (queueCommandBusy || !key) return;
+    queueCommandBusy = true;
+    try {
+      const result = await command('queue-play-next', { key, limit: 50 });
+      if (result && Array.isArray(result.upcoming)) {
+        queueDialogData = result;
+        queueDialogSignature = queueStateSignature();
+        renderQueue(result);
+        queueStatus('');
+        showNotice('已设为下一首播放');
+      }
+    } finally { queueCommandBusy = false; }
   }
 
   function renderHistory(entries) {
