@@ -12,7 +12,7 @@ Windows 和 Android 的搜索结果按实际歌单数据显示归属。添加入
 
 后端沿用既有 canonical 导入和 PlayerEngine.addTracksDetailed，只增加明确的 added/exists/duplicate 状态、规范化 key 及未确认写入检查，不修改原去重、插入顺序、播放或歌单格式。零计数时仅当目标队列确含该 key 才能报告已存在。
 
-共享 app/ui/search-match.js 以平台限定的稳定标识匹配本地曲目，并支持规范化 HTTPS URL 回退；不使用歌名/作者判定真实归属，也不为显示标记发起网络导入。QQ 使用 songmid，网易云使用数字 id，Bilibili 使用 BV/av 标识；不会猜测 av 与 BV 的对应关系。无法可靠识别时保守地保持 ＋。
+共享 app/ui/search-match.js 以平台限定的稳定标识匹配本地曲目，并支持规范化 HTTPS URL 回退；不使用歌名/作者判定真实归属，也不为显示标记发起网络导入。QQ 使用 songmid，网易云使用数字 id，Bilibili 使用 BV/av 标识及分 P 页码（搜索默认 P1）；不会猜测 av 与 BV 的对应关系。无法可靠识别时保守地保持 ＋。
 
 两端按播放器快照中的 playlists/tracks 计算已有归属，并校正本次会话的添加结果。歌曲被移出或歌单被删除后撤销失效状态；重新搜索或重启/刷新时从真实歌单重新计算，不把视觉标记单独持久化。
 

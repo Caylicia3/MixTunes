@@ -104,6 +104,21 @@ test('search add feedback and result state stay in sync on Windows and Android',
   for (const mobile of [false, true]) {
     const client = mobile ? 'android' : 'windows';
 
+    await t.test(client + ': P2 does not disable adding the missing P1', async () => {
+      const snapshot = structuredClone(STATE);
+      const part = { key: 'bilibili:BV17x411w7KC:102', platform: 'bilibili', sourceId: 'BV17x411w7KC', url: 'https://www.bilibili.com/video/BV17x411w7KC?p=2', title: 'Video P2', artist: 'Author', extra: { page: 2, cid: '102' } };
+      snapshot.tracks.push(part); snapshot.playlists[0].queue.push(part.key);
+      const page = await fixture(mobile, snapshot);
+      await search(page, mobile);
+      const row = rowFor(page, mobile, 'bilibili');
+      assert.equal(await icon(row, mobile), '＋');
+      await openTarget(page, row, mobile);
+      const submit = page.locator(mobile ? '[data-target-add="a"]' : '#search-add-submit');
+      assert.equal(await submit.isDisabled(), false);
+      await chooseAndSubmit(page, mobile, 'a');
+      assert.equal(await page.evaluate(() => window.addCalls[0].platform), 'bilibili');
+    });
+
     await t.test(client + ': success shows feedback, marks the result and still allows other playlists', async () => {
       const page = await fixture(mobile);
       const row = await search(page, mobile);

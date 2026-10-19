@@ -72,3 +72,19 @@ test('identity sets expose the ids used for matching', () => {
   assert.deepEqual([...trackIdentity(track('bilibili', 'bilibili:BV17x411w7KC:9', 'BV17x411w7KC')).ids], ['BV17x411w7KC']);
   assert.deepEqual([...itemIdentity(item('qq', '0016IKty1sTxqi')).ids], ['0016IKty1sTxqi']);
 });
+
+test('Bilibili search membership distinguishes P1 from P2 and unknown parts', () => {
+  const id = 'BV17x411w7KC', url = 'https://www.bilibili.com/video/' + id;
+  const p1 = track('bilibili', `bilibili:${id}:101`, id, { url, extra: { page: 1 } });
+  const p2 = track('bilibili', `bilibili:${id}:102`, id, { url: url + '?p=2', extra: { page: 2 } });
+  const result = item('bilibili', id, { url });
+  assert.equal(isSameSong(p2, result), false);
+  assert.equal(isSameSong(p1, result), true);
+  assert.equal(isSameSong(p2, item('bilibili', id, { url: url + '?p=2' })), true);
+  assert.deepEqual(playlistsContaining([{ id: 'second', queue: [p2.key] }, { id: 'both', queue: [p1.key, p2.key] }], [p1, p2], result), ['both']);
+  assert.equal(isSameSong({ ...p2, url: '' }, result), false);
+  assert.equal(isSameSong({ ...p1, url: '', extra: {} }, result), false);
+  assert.equal(isSameSong({ ...p1, extra: { page: 2 } }, result), false);
+  assert.equal(isSameSong({ ...p1, url: url + '?p=bad', extra: {} }, result), false);
+  assert.equal(isSameSong({ ...p1, url: url + '?p=1' }, result), true);
+});

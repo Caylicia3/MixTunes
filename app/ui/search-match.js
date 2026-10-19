@@ -53,8 +53,30 @@
     return { ids, urls };
   }
 
+  function bilibiliPart(value, searchResult = false) {
+    const page = value?.extra?.page;
+    if (page !== undefined && (!Number.isSafeInteger(Number(page)) || Number(page) < 1)) return null;
+    let urlPage = null;
+    if (value?.url) {
+      try {
+        const url = new URL(value.url);
+        if (!['www.bilibili.com', 'bilibili.com'].includes(url.hostname) || !/^\/video\/(?:BV[a-zA-Z0-9]{10}|av\d+)\/?$/.test(url.pathname)) return null;
+        urlPage = Number(url.searchParams.get('p') || 1);
+        if (!Number.isSafeInteger(urlPage) || urlPage < 1) return null;
+      } catch { return null; }
+    }
+    if (page !== undefined && urlPage !== null && Number(page) !== urlPage) return null;
+    return page !== undefined ? Number(page) : urlPage ?? (searchResult ? 1 : null);
+  }
+
   function isSameSong(track, item) {
     if (!track || !item || track.platform !== item.platform) return false;
+    // A search result defaults to P1; another part of that BV is not the same
+    // playable item. Unknown or contradictory local part metadata is not proof.
+    if (track.platform === 'bilibili') {
+      const part = bilibiliPart(track);
+      if (part === null || part !== bilibiliPart(item, true)) return false;
+    }
     const trackIds = trackIdentity(track), itemIds = itemIdentity(item);
     for (const id of itemIds.ids) if (trackIds.ids.has(id)) return true;
     for (const url of itemIds.urls) if (trackIds.urls.has(url)) return true;
