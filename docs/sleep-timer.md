@@ -6,7 +6,7 @@ Windows 点击歌单标题旁的“设置”，Android 打开“设置 → 睡�
 
 ## 独立接入与实现
 
-- 本功能可直接用于原版 MixTunes，不依赖新增托盘生命周期、背景、图标或歌曲定位。Windows 保留原版关闭窗口即退出的行为；最小化才保留进程与定时器。
+- 本功能可直接用于原版 MixTunes，不依赖新增托盘生命周期、背景、图标或歌曲定位。Windows 关闭窗口后保留托盘、播放和定时器；使用退出命令结束进程。
 - Windows 主进程 `app/src/sleep-timer.cjs` 保存唯一截止时间 endsAt。提前回调重新调度，延后回调按截止时间结算，旧回调不能触发替换后的计时。退出时清理。IPC `app:sleep-timer` 提供 get/set/cancel，preload 暴露查询和状态订阅。
 - Android `SleepTimer` 是纯 JVM 截止时间核心，`SleepTimerHost` 是进程级宿主，使用 elapsedRealtime、主线程 Handler，Activity 重建不创建第二个权威计时器。UI 只查询/展示剩余时间。
 - Handler 使用 uptimeMillis，深睡眠期间回调可能延后；Activity onResume、状态查询执行 expireIfDue(true) 补结算，开始新播放前 expireIfDue(false) 静默清除过期定时器，避免旧截止时间打断新播放。
@@ -30,7 +30,7 @@ node --test tools/sleep-timer-electron.cjs
 ./android/native/test-qq-mobile-login.ps1
 ```
 
-Windows Electron 测试仅在 --test-mode 下使用秒级计时和状态注入，检查正常窗口、最小化、取消/替换、已暂停不恢复、非零进度/队列保持，以及原版 X 关闭确实退出。它不是三平台真实账号测听。
+Windows Electron 测试仅在 --test-mode 下使用秒级计时和状态注入，检查正常窗口、最小化、取消/替换、已暂停不恢复、非零进度/队列保持，关闭到托盘后继续计时及显式退出。它不是三平台真实账号测听。
 
 Android runtime 测试执行生成的实际 bundle 和真实 PlayerEngine，模拟原生桥并以 NativeBridge 中接受的方法名约束接口；验证查询、设置、取消、面板重建、到期状态同步和恢复刷新。JVM 测试覆盖深睡眠延迟回调、补结算、单次到期和静默清除。这些都不等同于 Android 设备后台/锁屏验收。
 
@@ -40,3 +40,7 @@ Android runtime 测试执行生成的实际 bundle 和真实 PlayerEngine，模�
 - Android：真实锁屏/后台的暂停时机、通知栏同步、Activity 重建、深睡眠唤醒补结算、不同厂商省电策略与 WebView 版本。
 - 系统杀进程后不恢复定时；不实现音量渐弱、定时关机或自动切换歌单。
 - 本项不修复音视频切换进度或 QQ 在线搜索失败。
+
+到期先取消尚未完成的搜索播放及视频请求，再按当前状态暂停后端。未播放或手动暂停时也会取消过期前的请求；到期后新发起的播放不受影响。
+
+回归：`node --test tools/sleep-timer-race.cjs` 使用独立资料目录及静音合成音频验证延迟搜索请求不会在到期后启动。

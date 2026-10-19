@@ -83,4 +83,35 @@ test('generated Android runtime connects sleep timer UI to native methods and th
     await page.evaluate(()=>{window.timer={active:true,minutes:5,endsAt:Date.now()+300000,remainingMs:300000};window.__mixNativeEvent({type:'accounts-refresh'});});
     await page.waitForFunction(()=>document.getElementById('sleep-timer-status').textContent.includes('5 分'));
   });
+  for (const status of ['playing', 'paused', 'idle']) await t.test('expiry cancels delayed search playback from '+status,async()=>{
+    const page=await fixture();
+    await page.evaluate(async status=>{
+      window.fixtureEngine.state.status=status;
+      let serial=0;
+      window.MixTunesBridge.crypto=text=>{
+        const request=JSON.parse(text);
+        if(request.op==='randomUUID')return JSON.stringify({ok:true,value:'00000000-0000-4000-8000-'+String(++serial).padStart(12,'0')});
+        return JSON.stringify({ok:false,error:'Unexpected fixture crypto operation'});
+      };
+      const proto=window.__mixRequire('./search-service.cjs').SearchService.prototype, original=proto.search;
+      proto.search=async function(payload){
+        this.searchPlatform=async()=>({items:[{platform:'netease',id:'2',url:'https://music.163.com/song?id=2',title:'Delayed'}],total:1});
+        this.importResource=()=>new Promise(resolve=>{window.releaseImport=()=>resolve({tracks:[{platform:'netease',sourceId:'2',key:'netease:2',url:'https://music.163.com/song?id=2',title:'Delayed'}]});});
+        return original.call(this,payload);
+      };
+      const q=await window.playerAPI.search({platform:'netease',query:'Delayed'});
+      if(!q.ok)throw Error(q.error);
+      window.pendingPlay=window.playerAPI.playSearchResult({requestId:q.requestId,platform:'netease',id:'2'});
+    },status);
+    await page.waitForFunction(()=>typeof window.releaseImport==='function');
+    await page.evaluate(()=>window.__mixNativeEvent({type:'sleep-timer-expired'}));
+    // A following IPC snapshot runs after the queued native-event handler.
+    const atExpiry=await page.evaluate(()=>window.playerAPI.getState());
+    await page.evaluate(()=>window.releaseImport());
+    assert.equal((await page.evaluate(()=>window.pendingPlay)).canceled,true);
+    const after=await page.evaluate(()=>window.playerAPI.getState());
+    assert.equal(after.currentKey,atExpiry.currentKey);
+    assert.equal(after.status,status==='playing'?'paused':status);
+    assert.equal((await page.evaluate(()=>window.nativeCalls)).filter(c=>c.method==='audio-activate').length,0);
+  });
 });

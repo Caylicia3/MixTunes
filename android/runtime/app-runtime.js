@@ -181,6 +181,7 @@
       else if(event?.type==='command')command(event.name,event.payload||{}).catch(notice);
       else if(event?.type==='accounts-refresh'){updateAccounts().catch(()=>{});window.dispatchEvent(new Event('mix-sleep-timer-refresh'));}
       else if(event?.type==='sleep-timer-expired'){
+        searchService.cancelPlayback();pendingVideo=null;videoRequest++;transportRequest++;
         // The native host already stopped native audio; only ask the engine when it
         // still believes playback is active, so a manually paused player is untouched.
         if(shouldPause(engine.state.status))command('pause').catch(notice);

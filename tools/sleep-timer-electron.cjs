@@ -8,7 +8,7 @@ const { _electron: electron } = require('../app/node_modules/playwright-core');
 
 // Runs the packaged Windows build. The test hook only exists when the app was
 // started with --test-mode, so it is never reachable for normal users.
-test('packaged Windows sleep timer expires normally and while minimized without tray lifecycle', { skip: process.platform !== 'win32', timeout: 90000 }, async t => {
+test('packaged Windows sleep timer expires normally and while minimized with tray lifecycle', { skip: process.platform !== 'win32', timeout: 90000 }, async t => {
   const root = path.resolve(__dirname, '..');
   const executable = process.env.MIXTUNES_SLEEP_EXECUTABLE;
   if (!executable || !fs.existsSync(executable)) {
@@ -117,5 +117,12 @@ test('packaged Windows sleep timer expires normally and while minimized without 
   const exit = new Promise(resolve => { app.process().once('exit', code => resolve(code)); setTimeout(() => resolve(null), 15000).unref(); });
   await timer('set',{minutes:1});
   await app.evaluate(({BrowserWindow},id)=>{setTimeout(()=>BrowserWindow.fromId(id).close(),0);},windowId);
-  assert.equal(await exit, 0, 'original close still quits rather than hiding, including with an active timer');
+  await page.waitForTimeout(250);
+  assert.equal(await app.evaluate(({BrowserWindow},id)=>BrowserWindow.fromId(id).isVisible(),windowId),false);
+  assert.equal((await timer('get')).active,true,'closing to tray retains the timer');
+  await hook('test.forceStatus("playing")');await hook('test.startSeconds(.2)');
+  for(let i=0;(await hook('test.state()')).active&&i<100;i++)await page.waitForTimeout(50);
+  assert.equal(await hook('test.status()'),'paused','hidden playback pauses on expiry');
+  await page.evaluate(()=>window.playerAPI.command('quit'));
+  assert.equal(await exit,0,'explicit quit exits');
 });
