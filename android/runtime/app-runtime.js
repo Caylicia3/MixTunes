@@ -7,9 +7,15 @@
   const {LyricsService}=req('./lyrics.cjs'),{normaliseShareLink}=req('./share-link.cjs');
   const {mergeTransferredLibrary}=req('./playlist-transfer.cjs'),{shouldPause}=req('./sleep-timer.cjs');
   const stateListeners=new Set(),noticeListeners=new Set(),contexts=new Map();
-  let engine,searchService,lyricsService,importing=false,saveQueue=Promise.resolve(),accountsPromise=null,accountsRefreshAgain=false,pendingVideo=null,videoRequest=0,transportRequest=0,savedAt=0;
+  let engine,searchService,lyricsService,importing=false,saveQueue=Promise.resolve(),historySaveQueue=Promise.resolve(),accountsPromise=null,accountsRefreshAgain=false,pendingVideo=null,videoRequest=0,transportRequest=0,savedAt=0;
   const libraryKey='mixtunes-library-v2';
   function notice(message){for(const fn of noticeListeners){try{fn(errorMessage(message));}catch{}}}
+  function persistHistory(entries){
+    // History is independent from library.json. Its failure is reported once but
+    // must never reject playback or replace the user's saved playlists.
+    const json=JSON.stringify({schemaVersion:1,entries});
+    historySaveQueue=historySaveQueue.catch(()=>{}).then(()=>native('history-save',{json})).catch(()=>notice('播放历史暂未保存，音乐播放不受影响'));
+  }
   function persist(state){
     savedAt=Math.max(Date.now(),savedAt+1);
     const json=JSON.stringify({...normaliseLibrary(state),_mixtunesSavedAt:savedAt},null,2);
@@ -122,7 +128,7 @@
       case'video-open':return requestVideo(payload.key,payload.playlistId);
       case'video-close':pendingVideo=null;await engine.closeVideo();break;
       case'video-panel':await engine.setVideoPanel(payload);break;
-      case'quit':await engine.pause();await saveQueue;await native('quit',{});break;
+      case'quit':await engine.pause();await saveQueue;await historySaveQueue;await native('quit',{});break;
       default:throw new Error('不支持的操作');
     }
     return{ok:true};
@@ -149,7 +155,11 @@
     const useLocal=!!localSaved&&(!nativeSaved||time(localSaved)>time(nativeSaved));
     const library=(useLocal?localSaved:nativeSaved)||{};savedAt=time(library);
     if((nativeText||localText)&&!nativeSaved&&!localSaved)notice('本地歌单暂时无法读取，请导入备份');
-    engine=new PlayerEngine({library:normaliseLibrary(library),resolveTrack,contextFor,audio:new NativeAudio(),web:new NativeWeb('web'),video:new NativeWeb('video'),persist,record:()=>{}});
+    let history=[];try{
+      const raw=(await native('history-load',{}))?.json;
+      if(raw){const data=JSON.parse(raw);history=Array.isArray(data?.entries)?data.entries:data;}
+    }catch{}
+    engine=new PlayerEngine({library:normaliseLibrary(library),resolveTrack,contextFor,audio:new NativeAudio(),web:new NativeWeb('web'),video:new NativeWeb('video'),persist,record:()=>{},history,persistHistory});
     searchService=new SearchService({searchPlatform,contextFor,importResource,parseInput,safeTrack,engine});
     lyricsService=new LyricsService({engine,contextFor});
     engine.on('state',state=>{for(const fn of stateListeners){try{fn(state);}catch{}}});engine.on('notice',notice);

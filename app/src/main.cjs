@@ -3,6 +3,7 @@ const electron=require('electron');
 const {app,BrowserWindow,ipcMain,session,shell,dialog,globalShortcut,Menu,protocol,nativeTheme}=electron;
 const fs=require('node:fs');const path=require('node:path');const {pathToFileURL}=require('node:url');
 const {LibraryStore,normaliseLibrary,safeTrack}=require('./store.cjs');
+const {HistoryStore}=require('./history-store.cjs');
 const {PlayerEngine,errorMessage}=require('./engine.cjs');
 const {parseInput,importResource,resolveTrack}=require('./providers.cjs');
 const {searchPlatform}=require('./search-providers.cjs');
@@ -282,11 +283,14 @@ function setupTray(){
 }
 async function start(){
   store=new LibraryStore(app.getPath('userData'));const library=store.load();
+  const historyStore=new HistoryStore(app.getPath('userData'));
+  let history=[];try{history=historyStore.load();}catch{history=[];}
   if(testMode){library.muted=true;library.volume=0;}
   const audio=new AudioPlayer({electron,sessionFor,onEvent:event=>engine?.onEvent(event),onDiagnostic:record});
   const web=new WebPlayer({electron,sessionFor,onEvent:event=>engine?.onEvent({...event,backend:'web'})});
   const video=new VideoPlayer({electron,sessionFor,getHostWindow:()=>mainWindow,onEvent:event=>engine?.onEvent({...event,backend:'video'})});videoPlayer=video;
-  engine=new PlayerEngine({library,resolveTrack,contextFor,audio,web,video,persist:state=>store.save(state),record});
+  engine=new PlayerEngine({library,resolveTrack,contextFor,audio,web,video,persist:state=>store.save(state),record,
+    history,persistHistory:entries=>historyStore.save(entries)});
   sleepTimer=createSleepTimer({onExpire:()=>{expireSleepTimer().catch(()=>{});}});
   if(testMode)app.__mixSleepTest={
     startSeconds:seconds=>{sleepTimer.startMs(Number(seconds)*1000);return publishSleepTimer();},
