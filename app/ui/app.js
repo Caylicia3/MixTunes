@@ -3,6 +3,7 @@
 (() => {
   const api = window.playerAPI;
   const byId = (id) => document.getElementById(id);
+  const sleepTimerPanel = window.mixTunesSleepTimer?.mount({ api, anchor: byId('quality-save-status') });
   const platformNames = { qq: 'QQ 音乐', netease: '网易云', bilibili: 'Bilibili' };
   const DIALOG_IDS = ['playlist-dialog', 'quality-dialog', 'track-rename-dialog', 'track-range-dialog', 'online-search-dialog', 'search-add-dialog', 'lyrics-dialog', 'playlist-share-dialog'];
   const modeNames = { sequential: '顺序播放', 'repeat-all': '列表循环', 'repeat-one': '单曲循环', shuffle: '随机播放' };
@@ -1522,6 +1523,7 @@
   byId('quit-app').addEventListener('click', () => command('quit'));
   byId('open-quality-settings').addEventListener('click', () => {
     byId('quality-save-status').textContent = '设置自动保存';
+    sleepTimerPanel?.refresh();
     renderQuality((state.tracks || []).find((track) => track.key === state.currentKey));
     showDialog('quality-dialog');
   });

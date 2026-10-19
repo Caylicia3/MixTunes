@@ -37,7 +37,7 @@
       <button id="toggle-theme" data-testid="toggle-theme" class="theme-toggle" aria-label="切换到夜间主题" title="切换到夜间主题"><svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M20.2 15.4A8.3 8.3 0 0 1 8.6 3.8 8.3 8.3 0 1 0 20.2 15.4Z"></path></svg></button>
       <button id="toggle-video-panel" data-testid="toggle-video-panel" class="video-panel-toggle" aria-label="打开视频侧栏" aria-pressed="false" title="打开视频侧栏"><svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"></rect><path d="M15 4v16"></path><path class="panel-symbol-fill" d="M15 4h2a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-2z"></path></svg></button>
     <main class="main" id="library-main">
-      <header class="library-heading"><div class="library-title"><h2><span class="playlist-name" id="active-playlist-name" data-testid="active-playlist-name">统一歌单</span><span id="track-count" data-testid="track-count">0</span></h2></div><div class="backup-actions"><button id="open-quality-settings" data-testid="open-quality-settings" aria-label="打开平台音质设置">音质</button><button id="import-file" data-testid="import-file" title="导入 JSON 歌单备份或链接文件">导入文件</button><button id="export-library" data-testid="export-library" title="导出歌单 JSON 备份">导出</button></div></header>
+      <header class="library-heading"><div class="library-title"><h2><span class="playlist-name" id="active-playlist-name" data-testid="active-playlist-name">统一歌单</span><span id="track-count" data-testid="track-count">0</span></h2></div><div class="backup-actions"><button id="open-quality-settings" data-testid="open-quality-settings" aria-label="打开播放器设置">设置</button><button id="import-file" data-testid="import-file" title="导入 JSON 歌单备份或链接文件">导入文件</button><button id="export-library" data-testid="export-library" title="导出歌单 JSON 备份">导出</button></div></header>
       <div class="toolbar">
         <div class="source-filters" role="group" aria-label="按平台筛选"><button class="active" data-filter="all" data-testid="filter-all" aria-pressed="true">全部</button><button data-filter="qq" data-testid="filter-qq" aria-pressed="false">QQ 音乐</button><button data-filter="netease" data-testid="filter-netease" aria-pressed="false">网易云</button><button data-filter="bilibili" data-testid="filter-bilibili" aria-pressed="false">B 站</button></div>
         <div class="library-search-tools"><label class="search-wrap"><span aria-hidden="true">⌕</span><input type="search" id="search-input" data-testid="search-input" placeholder="筛选歌单" aria-label="搜索歌单"></label><button id="open-online-search" data-testid="open-online-search">全平台搜索</button></div>
@@ -74,7 +74,7 @@
     </form>
   </dialog>
   <dialog id="quality-dialog" class="playlist-dialog quality-dialog" aria-labelledby="quality-dialog-title" aria-describedby="quality-dialog-description">
-    <h2 id="quality-dialog-title">平台音质</h2>
+    <h2 id="quality-dialog-title">播放器设置</h2>
     <p id="quality-dialog-description">音质受账号权限和音源限制。</p>
     <div class="quality-setting"><label for="quality-qq"><span class="platform-icon qq" aria-hidden="true">Q</span>QQ 音乐</label><select id="quality-qq" data-testid="quality-qq" aria-label="QQ 音乐音质"><option value="auto">自动</option><option value="high">高品质</option><option value="lossless">无损</option><option value="standard">标准</option></select></div>
     <div class="quality-setting"><label for="quality-netease"><span class="platform-icon netease" aria-hidden="true">云</span>网易云音乐</label><select id="quality-netease" data-testid="quality-netease" aria-label="网易云音乐音质"><option value="auto">自动</option><option value="high">高品质</option><option value="lossless">无损</option><option value="standard">标准</option></select></div>
@@ -107,6 +107,7 @@
   <dialog id="playlist-share-dialog" data-testid="playlist-share-dialog" class="playlist-dialog playlist-share-dialog" aria-labelledby="playlist-share-heading">
     <header class="online-search-heading"><h2 id="playlist-share-heading">传到手机</h2><button id="close-playlist-share" data-testid="close-playlist-share" class="icon-button" aria-label="关闭分享窗口" title="关闭">×</button></header><p class="share-hint">电脑和手机连接同一 Wi-Fi</p><p id="playlist-share-status" data-testid="playlist-share-status" role="status"></p><div id="playlist-share-details" hidden><p id="playlist-share-counts"></p><div id="playlist-share-address-choice" hidden><label for="playlist-share-address">网络地址</label><select id="playlist-share-address" data-testid="playlist-share-address"></select></div><label for="playlist-share-url" class="sr-only">手机访问链接</label><div class="share-url-row"><input id="playlist-share-url" data-testid="playlist-share-url" readonly spellcheck="false"><button id="copy-playlist-share" data-testid="copy-playlist-share">复制链接</button></div><p id="playlist-share-expiry"></p></div><div class="dialog-actions"><button id="stop-playlist-share" data-testid="stop-playlist-share" disabled>停止分享</button><button id="refresh-playlist-share" data-testid="refresh-playlist-share" class="primary">重新生成</button></div>
   </dialog>
+  <script src="sleep-timer.js"></script>
   <script src="search-match.js"></script>
   <script src="app.js"></script>
 </body>
