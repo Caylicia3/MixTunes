@@ -34,9 +34,9 @@ test('current playback cover background stays local and independent of transport
       }
       if (url.origin !== 'http://mixtunes.test') return route.abort();
       const file = url.pathname.slice(1) || 'index.html';
-      if (!['index.html', 'theme.js', 'styles.css', 'cover-background.css', 'cover-background.js', 'search-match.js', 'sleep-timer.js', 'runtime.js', 'app.js', 'ui.js'].includes(file)) return route.abort();
+      if (!['index.html', 'theme.js', 'styles.css', 'cover-background.css', 'cover-background.js', 'background-image.js', 'background-settings.js', 'search-match.js', 'sleep-timer.js', 'runtime.js', 'app.js', 'ui.js'].includes(file)) return route.abort();
       let body;
-      if (mobile && file === 'runtime.js' && !realRuntime) body = ['search-match.js', 'sleep-timer.js', 'cover-background.js'].map(name => fs.readFileSync(path.join(__dirname, '../app/ui', name))).join('\n');
+      if (mobile && file === 'runtime.js' && !realRuntime) body = ['search-match.js', 'sleep-timer.js', 'cover-background.js', 'background-image.js', 'background-settings.js'].map(name => fs.readFileSync(path.join(__dirname, '../app/ui', name))).join('\n');
       else body = fs.readFileSync(path.join(__dirname, '..', mobile ? 'android/web' : 'app/ui', file));
       return route.fulfill({ body, contentType: file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css' : 'application/javascript' });
     });
@@ -44,7 +44,7 @@ test('current playback cover background stays local and independent of transport
       window.stateFixture = snapshot; window.calls = [];
       window.nativeCalls = [];
       if (realRuntime) {
-        let counter = 0;
+        let counter = 0, savedBackground = null;
         window.MixTunesBridge = {
           crypto: text => {
             const p = JSON.parse(text);
@@ -56,6 +56,11 @@ test('current playback cover background stays local and independent of transport
             if (p.method === 'storage-load') value = { json: JSON.stringify({ ...snapshot, schemaVersion: 2,
               playlists: snapshot.playlists.map(playlist => ({ ...playlist, mode: 'sequential', currentKey: playlist.queue.includes(snapshot.currentKey) ? snapshot.currentKey : null })),
               tracks: snapshot.tracks.map((track, i) => ({ ...track, sourceId: String(i + 1), url: track.platform === 'qq' ? 'https://y.qq.com/n/ryqq/songDetail/' + (i + 1) : 'https://music.163.com/song?id=' + (i + 1) })) }) };
+            else if (p.method === 'storage-background-load') value = savedBackground;
+            else if (p.method === 'storage-background-save') { savedBackground = p.payload; value = savedBackground; }
+            else if (p.method === 'storage-background-delete') { savedBackground = null; value = true; }
+            else if (p.method === 'background-pick') value = window.fixtureBackgroundChoice || { canceled: true };
+            else if (p.method === 'background-editor') value = true;
             else if (p.method === 'cookies') value = [];
             else if (p.method === 'sleep-timer-state') value = { active: false, endsAt: null, remainingMs: 0, minutes: null };
             else if (p.method === 'export') { window.exportedLibrary = p.payload.json; value = { saved: true }; }
@@ -66,7 +71,7 @@ test('current playback cover background stays local and independent of transport
         return;
       }
       window.sendState = patch => { Object.assign(window.stateFixture, patch); window.listener(structuredClone(window.stateFixture)); };
-      window.playerAPI = {
+      window.playerAPI = { background: async () => null,
         getState: async () => structuredClone(snapshot), onState: fn => { window.listener = fn; }, onNotice: () => {},
         command: async (name, payload) => {
           window.calls.push({ name, payload });
@@ -97,9 +102,9 @@ test('current playback cover background stays local and independent of transport
     await t.test(client + ': default off, local persistence, fresh snapshot after reload and immediate disable', async () => {
       const { page } = await fixture(mobile);
       assert.equal(await page.locator('#cover-background img').count(), 0);
-      await settings(page, mobile); assert.equal(await page.locator('#cover-background-enabled').isChecked(), false);
+      await settings(page, mobile); assert.equal(await page.locator('#background-mode').inputValue(), 'theme');
       const before = await page.evaluate(() => structuredClone(stateFixture));
-      await page.locator('#cover-background-enabled').check(); await ready(page, 'white.svg');
+      await page.locator('#background-mode').selectOption('current-cover'); await ready(page, 'white.svg');
       assert.deepEqual(await page.evaluate(() => stateFixture), before);
       const stored = await page.evaluate(() => ({ ...localStorage }));
       assert.equal(stored['mixtunes-background-mode'], 'current-cover');
@@ -109,7 +114,7 @@ test('current playback cover background stays local and independent of transport
       assert.equal(await page.locator('html').evaluate(el => el.classList.contains('has-cover-background')), false);
       await page.evaluate(() => window.sendState({ currentKey: stateFixture.tracks[1].key, currentTrack: stateFixture.tracks[1], status: 'paused' }));
       await ready(page, 'black.svg');
-      await settings(page, mobile); await page.locator('#cover-background-enabled').uncheck();
+      await settings(page, mobile); await page.locator('#background-mode').selectOption('theme');
       assert.equal(await page.locator('#cover-background img').count(), 0);
       assert.equal(await page.locator('#cover-background').evaluate(layer => getComputedStyle(layer).visibility), 'hidden');
       await page.reload(); assert.equal(await page.locator('#cover-background img').count(), 0);
@@ -117,7 +122,7 @@ test('current playback cover background stays local and independent of transport
 
     await t.test(client + ': playback identity survives browse/filter/search and progress without rebuilding images', async () => {
       const { page, requests } = await fixture(mobile); await settings(page, mobile);
-      await page.locator('#cover-background-enabled').check(); await ready(page, 'white.svg');
+      await page.locator('#background-mode').selectOption('current-cover'); await ready(page, 'white.svg');
       if (!mobile) await page.locator('#close-quality-settings').click();
       else await page.locator('[data-screen="library"]').click();
       await page.evaluate(() => { window.savedImage = document.querySelector('#cover-background img'); window.calls = []; });
@@ -140,7 +145,7 @@ test('current playback cover background stays local and independent of transport
     });
 
     await t.test(client + ': failed, unsafe and missing covers fall back; late loads cannot replace latest song', async () => {
-      const { page, delayed } = await fixture(mobile); await settings(page, mobile); await page.locator('#cover-background-enabled').check(); await ready(page, 'white.svg');
+      const { page, delayed } = await fixture(mobile); await settings(page, mobile); await page.locator('#background-mode').selectOption('current-cover'); await ready(page, 'white.svg');
       for (const src of ['', 'http://covers.test/unsafe.svg', 'https://covers.test/failed.svg']) {
         await page.evaluate(src => window.sendState({ currentTrack: { ...stateFixture.currentTrack, coverUrl: src } }), src);
         await page.waitForFunction(() => !document.documentElement.classList.contains('has-cover-background'));
@@ -156,7 +161,7 @@ test('current playback cover background stays local and independent of transport
     });
 
     await t.test(client + ': light/dark masks preserve contrast; reduced motion and screen sizes stay usable', async () => {
-      const { page } = await fixture(mobile); await settings(page, mobile); await page.locator('#cover-background-enabled').check(); await ready(page, 'white.svg');
+      const { page } = await fixture(mobile); await settings(page, mobile); await page.locator('#background-mode').selectOption('current-cover'); await ready(page, 'white.svg');
       if (!mobile) await page.locator('#close-quality-settings').click(); else await page.locator('[data-screen="library"]').click();
       for (const theme of ['light', 'dark']) {
         await page.evaluate(theme => window.mixlinkTheme.set(theme), theme);
@@ -181,8 +186,8 @@ test('current playback cover background stays local and independent of transport
       assert.equal(await page.locator('#cover-background').evaluate(layer => getComputedStyle(layer).pointerEvents), 'none');
       for (const size of mobile ? [{ width: 320, height: 640 }, { width: 812, height: 375 }, { width: 768, height: 1024 }] : [{ width: 960, height: 680 }]) {
         await page.setViewportSize(size); await settings(page, mobile);
-        const checkbox = page.locator('#cover-background-enabled');
-        await checkbox.uncheck(); await checkbox.check();
+        const checkbox = page.locator('#background-mode');
+        await checkbox.selectOption('theme'); await checkbox.selectOption('current-cover');
         await ready(page, 'complex.svg');
         const rect = await checkbox.evaluate(node => node.getBoundingClientRect().toJSON());
         assert.ok(rect.left >= 0 && rect.right <= size.width);
@@ -192,11 +197,11 @@ test('current playback cover background stays local and independent of transport
       if (mobile) {
         await page.setViewportSize({ width: 320, height: 640 });
         await page.evaluate(() => { document.documentElement.style.fontSize = '28px'; });
-        const label = page.locator('label.cover-background-setting');
+        const label = page.locator('label[for=background-mode]');
         await label.scrollIntoViewIfNeeded();
         const bounds = await label.evaluate(node => ({ rect: node.getBoundingClientRect().toJSON(), size: parseFloat(getComputedStyle(node).fontSize) }));
-        assert.ok(bounds.size >= 25 && bounds.rect.left >= 0 && bounds.rect.right <= 320 && bounds.rect.height >= 48);
-        await page.locator('#cover-background-enabled').uncheck();
+        assert.ok(bounds.size >= 25 && bounds.rect.left >= 0 && bounds.rect.right <= 320 && bounds.rect.height >= 48,JSON.stringify(bounds));
+        await page.locator('#background-mode').selectOption('theme');
         await shot(page, client + '-large-text-settings');
       }
     });
@@ -205,7 +210,7 @@ test('current playback cover background stays local and independent of transport
     const { page } = await fixture(true, true);
     await page.evaluate(() => window.playerAPI.command('playlist-select', { id: 'other' }));
     const before = await page.evaluate(async () => { window.nativeCalls = []; return window.playerAPI.getState(); });
-    await settings(page, true); await page.locator('#cover-background-enabled').check(); await ready(page, 'white.svg');
+    await settings(page, true); await page.locator('#background-mode').selectOption('current-cover'); await ready(page, 'white.svg');
     const after = await page.evaluate(() => window.playerAPI.getState());
     assert.deepEqual(after, before);
     const nativeCalls = await page.evaluate(() => window.nativeCalls);
@@ -213,6 +218,35 @@ test('current playback cover background stays local and independent of transport
     await page.evaluate(() => window.playerAPI.exportLibrary());
     const exported = await page.evaluate(() => window.exportedLibrary);
     assert.ok(exported && !exported.includes('mixtunes-background-mode') && !exported.includes('current-cover'));
-    assert.equal(await page.locator('#cover-background-enabled').isChecked(), true);
+    assert.equal(await page.locator('#background-mode').inputValue(), 'current-cover');
+  });
+  await t.test('Android real runtime routes private backgrounds separately from playlist and transport',async()=>{
+    const {page}=await fixture(true,true);
+    const result=await page.evaluate(async()=>{
+      const before=await playerAPI.getState();nativeCalls.length=0;
+      const value={version:1,image:'data:image/jpeg;base64,AAAA',crop:{x:.4,y:.6,zoom:2}};
+      await playerAPI.background('save',value);const loaded=await playerAPI.background('load');
+      await playerAPI.background('editor',{open:true});await playerAPI.background('editor',{open:false});
+      const pick=await playerAPI.background('pick');await playerAPI.background('delete');
+      return{before,after:await playerAPI.getState(),loaded,pick,methods:nativeCalls.map(c=>c.method)};
+    });
+    assert.deepEqual(result.after,result.before);assert.equal(result.loaded.crop.zoom,2);assert.equal(result.pick.canceled,true);
+    assert.deepEqual(result.methods,['storage-background-save','storage-background-load','background-editor','background-editor','background-pick','storage-background-delete']);
+  });
+  await t.test('Android production crop dialog remains accessible above the player in small, landscape and tablet layouts',async()=>{
+    const {page}=await fixture(true,true);
+    const before=await page.evaluate(async()=>{
+      const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=800;const ctx=canvas.getContext('2d');ctx.fillStyle='#e08c58';ctx.fillRect(0,0,600,800);ctx.fillStyle='#527bcb';ctx.fillRect(600,0,600,800);
+      window.fixtureBackgroundChoice={image:canvas.toDataURL('image/jpeg',.9)};return playerAPI.getState();
+    });
+    await settings(page,true);await page.locator('#background-pick').click();await page.locator('#background-crop-dialog').waitFor({state:'visible'});
+    for(const viewport of [{width:320,height:640},{width:812,height:375},{width:768,height:1024}]){
+      await page.setViewportSize(viewport);await page.waitForTimeout(30);await page.locator('#background-confirm').scrollIntoViewIfNeeded();
+      const bounds=await page.locator('#background-confirm').boundingBox();assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=viewport.width&&bounds.y+bounds.height<=viewport.height);
+      await shot(page,'android-actual-crop-'+viewport.width);
+    }
+    await page.locator('#background-confirm').click();await page.waitForFunction(()=>document.querySelector('#cover-background img.custom-background-image')?.naturalWidth===1200);
+    assert.equal(await page.locator('#background-mode').inputValue(),'custom');assert.deepEqual(await page.evaluate(()=>playerAPI.getState()),before);
+    assert.ok(!(await page.evaluate(()=>JSON.stringify(localStorage))).includes('data:image'));
   });
 });

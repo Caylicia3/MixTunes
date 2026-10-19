@@ -27,7 +27,7 @@ test('packaged Windows background persists across minimize and application resta
   const first = await launch();
   assert.equal(await first.page.locator('#cover-background img').count(), 0);
   await first.page.locator('#open-quality-settings').click();
-  await first.page.locator('#cover-background-enabled').check();
+  await first.page.locator('#background-mode').selectOption('current-cover');
   await first.page.waitForFunction(() => document.documentElement.classList.contains('has-cover-background'));
   await first.page.locator('#close-quality-settings').click();
   const before = await first.page.evaluate(() => window.playerAPI.getState());
@@ -43,7 +43,7 @@ test('packaged Windows background persists across minimize and application resta
   await first.app.close();
   const second = await launch();
   await second.page.waitForFunction(() => document.documentElement.classList.contains('has-cover-background'));
-  assert.equal(await second.page.locator('#cover-background-enabled').isChecked(), true);
+  assert.equal(await second.page.locator('#background-mode').inputValue(), 'current-cover');
   const restored = await second.page.evaluate(() => window.playerAPI.getState());
   assert.equal(restored.currentKey, track.key); assert.equal(restored.status, 'paused');
   assert.ok(!fs.readFileSync(path.join(dataDir, 'library.json'), 'utf8').includes('mixtunes-background-mode'));
