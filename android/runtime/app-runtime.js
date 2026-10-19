@@ -10,10 +10,11 @@
   let engine,searchService,lyricsService,importing=false,saveQueue=Promise.resolve(),historySaveQueue=Promise.resolve(),accountsPromise=null,accountsRefreshAgain=false,pendingVideo=null,videoRequest=0,transportRequest=0,savedAt=0;
   const libraryKey='mixtunes-library-v2';
   function notice(message){for(const fn of noticeListeners){try{fn(errorMessage(message));}catch{}}}
-  function persistHistory(entries){
+  function persistHistory(data){
     // History is independent from library.json. Its failure is reported once but
     // must never reject playback or replace the user's saved playlists.
-    const json=JSON.stringify({schemaVersion:1,entries});
+    const entries=Array.isArray(data)?data:data?.entries;
+    const json=JSON.stringify({schemaVersion:1,entries:Array.isArray(entries)?entries:[]});
     historySaveQueue=historySaveQueue.catch(()=>{}).then(()=>native('history-save',{json})).catch(()=>notice('播放历史暂未保存，音乐播放不受影响'));
   }
   function persist(state){
@@ -100,15 +101,22 @@
   }
   async function command(name,payload={}){
     if(!payload||typeof payload!=='object')throw new Error('操作参数无效');
-    if(['play','pause','next','previous','playlist-create','playlist-select','playlist-delete','clear','remove','video-close','quit'].includes(name)){pendingVideo=null;videoRequest++;}
-    const isTransport=['play','pause','next','previous','video-open','quit'].includes(name),request=isTransport?++transportRequest:transportRequest;
+    if(['play','pause','next','previous','history-play','playlist-create','playlist-select','playlist-delete','clear','remove','video-close','quit'].includes(name)){pendingVideo=null;videoRequest++;}
+    const isTransport=['play','pause','next','previous','history-play','video-open','quit'].includes(name),request=isTransport?++transportRequest:transportRequest;
     if(isTransport)searchService.cancelPlayback?.();
-    if(['play','next','previous'].includes(name)){await native('playback-start',{});if(request!==transportRequest)return{ok:true,canceled:true};}
+    if(['play','next','previous','history-play'].includes(name)){await native('playback-start',{});if(request!==transportRequest)return{ok:true,canceled:true};}
     switch(name){
       case'play':await engine.playKey(payload.key,{playlistId:payload.playlistId});break;
       case'pause':await engine.pause();break;
       case'next':await engine.next();break;
       case'previous':await engine.previous();break;
+      case'queue-preview':return{ok:true,...engine.queuePreview(payload.limit)};
+      case'queue-move':return{ok:true,...engine.queueMove(payload.fromIndex,payload.toIndex,payload.limit)};
+      case'queue-play-next':return{ok:true,...engine.queuePlayNext(payload.key,payload.limit)};
+      case'history-list':return{ok:true,entries:engine.historyList()};
+      case'history-remove':return{ok:true,...engine.historyRemove(payload.id)};
+      case'history-clear':return{ok:true,...engine.historyClear()};
+      case'history-play':return{ok:true,...await engine.historyPlay(payload.id)};
       case'seek':await engine.seek(payload.positionMs);break;
       case'volume':await engine.setVolume(payload.volume);break;
       case'mute':await engine.setVolume(engine.state.volume,payload.muted);break;

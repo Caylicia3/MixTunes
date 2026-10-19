@@ -417,6 +417,39 @@ class PlayerEngine extends EventEmitter {
     await this.playKey(key,{resume:false,manual:!natural&&!failed,fromPlayback:true});
   }
   async previous() {const key=this.queue.previous();if(key)await this.playKey(key,{resume:false,fromPlayback:true});}
+  queueLimit(limit) {
+    const value=Math.floor(Number(limit));
+    return Number.isFinite(value)?Math.max(1,Math.min(200,value)):50;
+  }
+  queueItem(key) {
+    const track=this.track(key);
+    return track?{key,title:track.displayTitle||track.title,artist:track.artist||'',platform:track.platform,durationMs:track.durationMs||0,coverUrl:track.coverUrl||''}
+      :{key,title:'未知歌曲',artist:'',platform:null,durationMs:0,coverUrl:''};
+  }
+  queuePreview(limit=50) {
+    const max=this.queueLimit(limit);
+    return {mode:this.queue.mode,currentKey:this.queue.currentKey,current:this.current()?this.queueItem(this.queue.currentKey):null,
+      upcoming:this.queue.upcoming(max).map(key=>this.queueItem(key)),repeatOne:this.queue.mode==='repeat-one',
+      canReorder:this.queue.mode!=='repeat-one',playbackPlaylistId:this.playbackPlaylistId};
+  }
+  refreshAfterQueueEdit(max) {
+    // A prepared audio slot belongs to the old next song; cancel it before
+    // preparing the new order so preview and real playback cannot diverge.
+    this.cancelPrepared();
+    if(this.state.status==='playing')this.prepareNext().catch(()=>{});
+    this.publish();
+    return this.queuePreview(max);
+  }
+  queueMove(fromIndex,toIndex,limit=50) {
+    const max=this.queueLimit(limit);
+    this.queue.moveUpcomingAt(fromIndex,toIndex,{limit:max});
+    return this.refreshAfterQueueEdit(max);
+  }
+  queuePlayNext(key,limit=50) {
+    const max=this.queueLimit(limit);
+    this.queue.playNext(key);
+    return this.refreshAfterQueueEdit(max);
+  }
   async seek(positionMs) {
     if(!Number.isFinite(positionMs))throw new Error('跳转位置无效');
     if(!this.current())return;

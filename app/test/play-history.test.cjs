@@ -5,6 +5,7 @@ const {
   MAX_ENTRIES, PlayHistory, canonicalTrack, historyThreshold,
   normaliseEntry, normaliseHistory,
 } = require('../src/play-history.cjs');
+const { normaliseLibrary } = require('../src/store.cjs');
 
 const netease = {
   key: 'netease:33894312', platform: 'netease', sourceId: '33894312',
@@ -130,4 +131,15 @@ test('serialization contains only the history envelope', () => {
   assert.equal('url' in data.entries[0], false);
   assert.equal(JSON.stringify(data).includes('qqRawSong'), false);
   assert.equal(JSON.stringify(data).includes('session'), false);
+});
+
+test('library normalisation and backups never carry history data', () => {
+  const library = normaliseLibrary({
+    tracks: [netease], queue: [netease.key],
+    history: [{ ...netease, playedAt: 1 }], historyVersion: 7, historyCount: 1,
+  });
+  assert.equal('history' in library, false);
+  assert.equal('historyVersion' in library, false);
+  assert.equal('historyCount' in library, false);
+  assert.equal(JSON.stringify(library).includes('playedAt'), false);
 });

@@ -172,13 +172,20 @@ async function importLinks(text){
 }
 async function command(name,payload={}){
   if(!payload||typeof payload!=='object')throw new Error('操作参数无效');
-  if(['play','pause','next','previous','video-open','quit'].includes(name))searchService.cancelPlayback?.();
-  if(['play','pause','next','previous','playlist-select','playlist-delete','clear','remove','video-close'].includes(name)||name==='video-panel'&&payload.open===false){videoRequestSerial++;pendingVideo=null;}
+  if(['play','pause','next','previous','history-play','video-open','quit'].includes(name))searchService.cancelPlayback?.();
+  if(['play','pause','next','previous','history-play','playlist-select','playlist-delete','clear','remove','video-close'].includes(name)||name==='video-panel'&&payload.open===false){videoRequestSerial++;pendingVideo=null;}
   switch(name){
     case'play':await engine.playKey(payload.key,{playlistId:payload.playlistId});break;
     case'pause':await engine.pause();break;
     case'next':await engine.next();break;
     case'previous':await engine.previous();break;
+    case'queue-preview':return{ok:true,...engine.queuePreview(payload.limit)};
+    case'queue-move':return{ok:true,...engine.queueMove(payload.fromIndex,payload.toIndex,payload.limit)};
+    case'queue-play-next':return{ok:true,...engine.queuePlayNext(payload.key,payload.limit)};
+    case'history-list':return{ok:true,entries:engine.historyList()};
+    case'history-remove':return{ok:true,...engine.historyRemove(payload.id)};
+    case'history-clear':return{ok:true,...engine.historyClear()};
+    case'history-play':return{ok:true,...await engine.historyPlay(payload.id)};
     case'seek':await engine.seek(payload.positionMs);break;
     case'volume':await engine.setVolume(payload.volume);break;
     case'mute':await engine.setVolume(engine.state.volume,payload.muted);break;
@@ -237,8 +244,8 @@ function setupIpc(){
   handler('app:export',async()=>{
     const {filePath,canceled}=await dialog.showSaveDialog(mainWindow,{title:'导出本地歌单备份',defaultPath:'MixTunes-歌单备份.json',filters:[{name:'JSON 歌单',extensions:['json']}]});
     if(canceled)return{ok:true,canceled:true};
-    const data=normaliseLibrary(engine.snapshot());
-    fs.writeFileSync(filePath,JSON.stringify(data,null,2),'utf8');return{ok:true,message:'已导出全部混合歌单备份，不包含账号登录信息。'};
+    const data=normaliseLibrary(librarySnapshot());
+    fs.writeFileSync(filePath,JSON.stringify(data,null,2),'utf8');return{ok:true,message:'已导出全部混合歌单备份，不包含账号登录信息和播放历史。'};
   });
   handler('app:import-file',async()=>{
     const {filePaths,canceled}=await dialog.showOpenDialog(mainWindow,{title:'导入歌单文件',properties:['openFile'],filters:[{name:'歌单或链接列表',extensions:['json','txt','csv']}]});
@@ -281,6 +288,10 @@ function setupTray(){
   });
   return Boolean(trayController.ensure());
 }
+function librarySnapshot(){
+  // Playlists, transfers and backups never carry playback-history data.
+  const snapshot=engine.snapshot();delete snapshot.historyVersion;delete snapshot.historyCount;return snapshot;
+}
 async function start(){
   store=new LibraryStore(app.getPath('userData'));const library=store.load();
   const historyStore=new HistoryStore(app.getPath('userData'));
@@ -302,7 +313,7 @@ async function start(){
   };
   searchService=new SearchService({searchPlatform,contextFor,importResource,parseInput,safeTrack,engine});
   lyricsService=new LyricsService({engine,contextFor});
-  playlistShare=new PlaylistShare({getLibrary:()=>engine.snapshot(),apkPath:()=>path.join(process.env.PORTABLE_EXECUTABLE_DIR||path.dirname(app.getPath('exe')),`MixTunes-Android-${app.getVersion()}.apk`)});
+  playlistShare=new PlaylistShare({getLibrary:()=>librarySnapshot(),apkPath:()=>path.join(process.env.PORTABLE_EXECUTABLE_DIR||path.dirname(app.getPath('exe')),`MixTunes-Android-${app.getVersion()}.apk`)});
   nativeTheme.themeSource='light';
   mainWindow=new BrowserWindow({title:'MixTunes',width:1240,height:840,minWidth:960,minHeight:680,show:!testMode&&!smokeTest,
     backgroundColor:'#ffffff',autoHideMenuBar:true,webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
