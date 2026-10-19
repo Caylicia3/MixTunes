@@ -7,6 +7,7 @@
   "author": "MixTunes",
   "license": "MIT",
   "scripts": {
+    "icons:generate": "node ../tools/generate-icons.cjs",
     "start": "electron .",
     "test": "node --test test/*.test.cjs",
     "smoke": "electron . --smoke-test",
@@ -38,7 +39,9 @@
       "target": [
         "portable"
       ],
-      "signAndEditExecutable": false,
+      "icon": "ui/icons/app.ico",
+      "signAndEditExecutable": true,
+      "signExecutable": false,
       "artifactName": "MixTunes-${version}-win-${arch}.${ext}"
     },
     "portable": {
